@@ -1,0 +1,15 @@
+# FROM nvcr.io/nvidia/tensorflow:23.01-tf2-py3
+FROM python:3.9.16-bullseye
+
+WORKDIR /workspace
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update
+RUN pip install --upgrade pip
+RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
+RUN pip install tensorflow==2.11
+RUN pip install sentencepiece
+RUN pip install evaluate
+RUN pip install rouge_score
+
+# CMD jupyter lab --ip=0.0.0.0 --allow-root
