@@ -17,14 +17,66 @@ If you do not want to use any `decoder_head_mask` now, please set `decoder_head_
 num_heads))`.
 """
 
+
 class PromptDenseLayer(tf.keras.layers.Layer):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.num_tokens = 20
+        self.soft_prompt = None
+        self.ones_array = None
 
-    def call(self, inputs_embeds):
+    def build(self, input_shape):
+        """
+        This function is called when a batch so that the appropriate sized arrays can be created
+        Args:
+            input_shape: Size of the input embedding array
 
-        return inputs_embeds
+        Returns:
+
+        """
+
+        # Create a prompt that
+        self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
+                                           initializer="glorot_normal")
+
+        # Create an ones array that
+        self.ones_array = tf.convert_to_tensor(np.ones(input_shape[0], ), dtype=self.dtype)
+
+        # This is added at the end to let super*() know that build is complete
+        super().build(input_shape)
+
+    def call(self, input_embeds, *args, **kwargs):
+        """
+
+        Args:
+            input_embeds: Input embeddings
+            *args: unused
+            **kwargs: unused
+
+        Returns:
+
+        """
+
+        # This scales the prompt to the input bacth size
+        scaled = tf.tensordot(self.ones_array, self.soft_prompt, axes=[[], []])
+
+        # Now concat the input embedding to the output embeddings
+        input_embeds = tf.concat((scaled, input_embeds), axis=1)
+
+        return input_embeds[:, :-self.num_tokens, :]
+
+    def compute_output_shape(self, input_shape):
+        """
+
+        Args:
+            input_shape: Shape of batch input
+
+        Returns: List with shape of batch output
+
+        """
+
+        return input_shape
 
 
 ####################################################
@@ -113,8 +165,10 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
                         f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
                     ),
                 )
+
                 inputs_embeds = self.embed_tokens(input_ids)
-                inputs_embeds = self.prompt(inputs_embeds)
+                if not self.is_decoder:
+                    inputs_embeds = self.prompt(inputs_embeds)
 
         batch_size, seq_length = input_shape
 
@@ -142,7 +196,8 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
         elif num_dims_attention_mask == 2:
             # Provided a padding mask of dimensions [batch_size, mask_seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
+            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length,
+            #  mask_seq_length]
             if self.is_decoder:
                 seq_ids = tf.range(mask_seq_length)
                 causal_mask = tf.less_equal(
@@ -278,12 +333,13 @@ class TFPromptT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageMo
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-        self.shared = tf.keras.layers.Embedding(
-            config.vocab_size,
-            config.d_model,
-            name="shared",
-            embeddings_initializer=get_initializer(self.config.initializer_factor),
-        )
+        with tf.device('cpu:0'):
+            self.shared = tf.keras.layers.Embedding(
+                config.vocab_size,
+                config.d_model,
+                name="shared",
+                embeddings_initializer=get_initializer(self.config.initializer_factor),
+            )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "shared"
 

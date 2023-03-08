@@ -10,9 +10,10 @@ from utils.model import TFPromptT5ForConditionalGeneration
 os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
 ENCODER_MAX_LEN = 250
 DECODER_MAX_LEN = 54
+NUM_TOKENS = 20
 
 
-class FullFineTuning(TFPromptT5ForConditionalGeneration, abc.ABC):
+class FineTune(TFPromptT5ForConditionalGeneration, abc.ABC):
     def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
         if log_dir or cache_dir:
             pass
@@ -177,7 +178,7 @@ class PrepDataset:
         if shuffling:
             dataset = dataset.shuffle(buffer_size)
 
-        dataset = dataset.batch(batch_size)
+        dataset = dataset.batch(batch_size, drop_remainder=True)
         dataset = dataset.prefetch(batch_size*10)
 
         return dataset
@@ -288,7 +289,7 @@ class PrepDataset:
         return tf_train_ds, tf_valid_ds, steps, val_steps
 
 
-def main_flow(checkpoint="t5-small", which='squad', batch_size=4, epochs=10, cache_path=None):
+def main_flow(checkpoint="t5-small", which='squad', batch_size=4, epochs=10, cache_path=None, debug=False):
     # learning_rate = 0.001  # Instead set a static learning rate
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.1)
 
@@ -297,10 +298,17 @@ def main_flow(checkpoint="t5-small", which='squad', batch_size=4, epochs=10, cac
     train_ds, val_ds, steps, val_steps = dprep.get(which=which, batch_size=batch_size, cache_path=cache_path)
 
     # Create a model instance
-    model = FullFineTuning.from_pretrained(checkpoint)
+    model = FineTune.from_pretrained(checkpoint)
+
+    # The prompt part of the code requires we create an array that is equal to the batch size. Need to rebuild it here
+    model.encoder.prompt.build((batch_size, ENCODER_MAX_LEN, model.encoder.prompt.soft_prompt.shape[-1]))
+
+    # Print a few elements of the sof prompt
+    tf.print(model.encoder.prompt.soft_prompt[:10, :10])
 
     # Compile the model with Categorical accuracy metric
-    model.compile(optimizer=optimizer, metrics=[tf.keras.metrics.SparseTopKCategoricalAccuracy(name='accuracy'), ])
+    model.compile(optimizer=optimizer, metrics=[tf.keras.metrics.SparseTopKCategoricalAccuracy(name='accuracy'), ],
+                  run_eagerly=debug)
     print("Total Steps: ", steps)
     print("Total Validation Steps: ", val_steps)
 
@@ -309,10 +317,12 @@ def main_flow(checkpoint="t5-small", which='squad', batch_size=4, epochs=10, cac
     #           validation_data=val_ds, validation_steps=val_steps-1, initial_epoch=0)
     model.fit(train_ds, epochs=epochs, callbacks=[], validation_data=val_ds, initial_epoch=0)
 
+    # Print a few elements of the sof prompt
+    tf.print(model.encoder.prompt.soft_prompt[:10, :10])
+
     return model
 
 
 if __name__ == '__main__':
     cp = os.path.join(os.path.dirname(__file__), "../cache")
-    model_o = main_flow(checkpoint='t5-small', which='squad', batch_size=10, cache_path=cp)
-
+    model_o = main_flow(checkpoint='t5-small', which='squad', batch_size=100, cache_path=cp, debug=False, epochs=1)
