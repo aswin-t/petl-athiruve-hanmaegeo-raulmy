@@ -1,9 +1,10 @@
+import abc
 import copy
 import warnings
 import numpy as np
 import tensorflow as tf
 from typing import Optional, Union, Tuple
-from transformers.models.t5 import TFT5PreTrainedModel, TFT5Block, TFT5LayerNorm, T5Config
+from transformers.models.t5 import TFT5PreTrainedModel, TFT5Block, TFT5LayerNorm, T5Config, TFT5ForConditionalGeneration
 from transformers.modeling_tf_utils import TFCausalLanguageModelingLoss, get_initializer, shape_list, TFModelInputType
 from transformers.modeling_tf_utils import unpack_inputs, keras_serializable
 from transformers.utils import ContextManagers
@@ -24,7 +25,7 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_tokens = 20
         self.soft_prompt = None
-        self.ones_array = None
+        # self.ones_array = None
 
     def build(self, input_shape):
         """
@@ -39,9 +40,6 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         # Create a prompt that
         self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
                                            initializer="glorot_normal")
-
-        # Create an ones array that
-        self.ones_array = tf.convert_to_tensor(np.ones(input_shape[0], ), dtype=self.dtype)
 
         # This is added at the end to let super*() know that build is complete
         super().build(input_shape)
@@ -58,12 +56,18 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
         """
 
-        # This scales the prompt to the input bacth size
-        scaled = tf.tensordot(self.ones_array, self.soft_prompt, axes=[[], []])
+        # This scales the prompt to the input batch size
+        # 1. create an ones array of batch size (batch_size, )
+        ones_array = tf.ones((tf.shape(input_embeds)[0], ), dtype=self.dtype)
+
+        # 2. tensordot with soft prompt
+        # Gives the shape (batch_size, num_tokens, model_d)
+        scaled = tf.tensordot(ones_array, self.soft_prompt, axes=[[], []])
 
         # Now concat the input embedding to the output embeddings
         input_embeds = tf.concat((scaled, input_embeds), axis=1)
 
+        # TODO athiruve - What about the end of sequence?
         return input_embeds[:, :-self.num_tokens, :]
 
     def compute_output_shape(self, input_shape):
@@ -166,6 +170,7 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
                     ),
                 )
 
+                # Added the soft prompt layer for only the encoder
                 inputs_embeds = self.embed_tokens(input_ids)
                 if not self.is_decoder:
                     inputs_embeds = self.prompt(inputs_embeds)
@@ -221,7 +226,6 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
         # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
         # extended_attention_mask = tf.math.equal(extended_attention_mask,
         #                                         tf.transpose(extended_attention_mask, perm=(-1, -2)))
-
         extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
 
         if self.is_decoder and encoder_attention_mask is not None:
@@ -575,3 +579,165 @@ class TFPromptT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageMo
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return self._shift_right(labels)
+
+
+class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
+    def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
+        if log_dir or cache_dir:
+            pass
+
+        # Initialize the TFPromptT5ForConditionalGeneration class
+        super().__init__(*args, **kwargs)
+
+        # This tracks the mean loss
+        self.loss_tracker = tf.keras.metrics.Mean(name='loss')
+
+    @tf.function
+    def train_step(self, data):
+        """
+
+        Args:
+            data: X and y data for training
+
+        Returns:
+
+        """
+
+        # What does X look like?
+        x = data
+        # Extract the Y as labels
+        y = x["labels"]
+
+        # Flatening the y, but why?
+        y = tf.reshape(y, [-1, 1])
+        with tf.GradientTape() as tape:
+            # There must be a __call__ method that has the forward pass
+            outputs = self(x, training=True)
+
+            # The calculated loss and the
+            loss = outputs[0]
+            logits = outputs[1]
+
+            # Mean loss
+            loss = tf.reduce_mean(loss)
+
+            # Get the gradient for the trainable weights
+            grads = tape.gradient(loss, self.trainable_variables)
+
+        # Apply the calcaulated gradient
+        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
+
+        # Get the current learning rate
+        # noinspection PyProtectedMember
+        lr = 0.0
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, logits)
+        metrics = {m.name: m.result() for m in self.metrics}
+        metrics.update({'lr': lr})
+        return metrics
+
+    def test_step(self, data):
+        """
+
+        Args:
+            data:
+
+        Returns:
+
+        """
+
+        x = data
+        y = x["labels"]
+        y = tf.reshape(y, [-1, 1])
+        output = self(x, training=False)
+
+        # tf.Gradient.Tape() is not set here as we do nto want gradient calculations
+        loss = output[0]
+        loss = tf.reduce_mean(loss)
+        logits = output[1]
+
+        # Track the loss here
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, logits)
+        return {m.name: m.result() for m in self.metrics}
+
+
+class FullFineTune(TFT5ForConditionalGeneration, abc.ABC):
+    def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
+        if log_dir or cache_dir:
+            pass
+
+        # Initialize the TFPromptT5ForConditionalGeneration class
+        super().__init__(*args, **kwargs)
+
+        # This tracks the mean loss
+        self.loss_tracker = tf.keras.metrics.Mean(name='loss')
+
+    @tf.function
+    def train_step(self, data):
+        """
+
+        Args:
+            data: X and y data for training
+
+        Returns:
+
+        """
+
+        # What does X look like?
+        x = data
+        # Extract the Y as labels
+        y = x["labels"]
+
+        # Flatening the y, but why?
+        y = tf.reshape(y, [-1, 1])
+        with tf.GradientTape() as tape:
+            # There must be a __call__ method that has the forward pass
+            outputs = self(x, training=True)
+
+            # The calculated loss and the
+            loss = outputs[0]
+            logits = outputs[1]
+
+            # Mean loss
+            loss = tf.reduce_mean(loss)
+
+            # Get the gradient for the trainable weights
+            grads = tape.gradient(loss, self.trainable_variables)
+
+        # Apply the calcaulated gradient
+        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
+
+        # Get the current learning rate
+        # noinspection PyProtectedMember
+        lr = 0.0
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, logits)
+        metrics = {m.name: m.result() for m in self.metrics}
+        metrics.update({'lr': lr})
+        return metrics
+
+    def test_step(self, data):
+        """
+
+        Args:
+            data:
+
+        Returns:
+
+        """
+
+        x = data
+        y = x["labels"]
+        y = tf.reshape(y, [-1, 1])
+        output = self(x, training=False)
+
+        # tf.Gradient.Tape() is not set here as we do nto want gradient calculations
+        loss = output[0]
+        loss = tf.reduce_mean(loss)
+        logits = output[1]
+
+        # Track the loss here
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, logits)
+        return {m.name: m.result() for m in self.metrics}
