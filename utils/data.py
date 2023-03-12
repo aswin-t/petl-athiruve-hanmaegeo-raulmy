@@ -1,14 +1,13 @@
 import os
 import random
+import numpy as np
+import pandas as pd
 import tensorflow as tf
 from typing import Union
 from functools import partial
 from transformers import AutoTokenizer
 from datasets import load_dataset, Dataset
-
-ENCODER_MAX_LEN = 250
-DECODER_MAX_LEN = 54
-NUM_TOKENS = 20
+from constants import ENCODER_MAX_LEN, DECODER_MAX_LEN, NUM_SOFT_TOKENS
 
 
 class LabelEncodeDecode:
@@ -60,6 +59,84 @@ class LabelEncodeDecode:
         else:
             # There is no translation involved
             return inpred
+
+
+def preprocess_data(text_pairs, tokenizer, model):
+    """
+
+    Args:
+        text_pairs: Pairs of input and output texts
+        tokenizer:
+        model:
+    Returns:
+
+    """
+    orig_text = text_pairs[0]
+    orig_encoded = tokenizer.batch_encode_plus(orig_text, max_length=ENCODER_MAX_LEN, padding='max_length',
+                                               truncation=True, return_attention_mask=True, return_tensors='tf')
+    orig_input_ids = np.array(orig_encoded["input_ids"], dtype="int32")
+    orig_attention_masks = np.array(orig_encoded["attention_mask"], dtype="int32")
+
+    target_text = text_pairs[1]
+    target_encoded = tokenizer.batch_encode_plus(target_text, max_length=DECODER_MAX_LEN, padding='max_length',
+                                                 truncation=True, return_tensors='tf')
+
+    # Decoder needs it shifted
+    label_ids = np.array(target_encoded['input_ids'])
+    decoder_input_ids = model.layers[-1]._shift_right(label_ids)
+    return [orig_input_ids, orig_attention_masks, decoder_input_ids], label_ids
+
+
+class BatchDataGenerator(tf.keras.utils.Sequence):
+
+    def __init__(self,
+                 tokenizer,
+                 model,
+                 data_filename,
+                 n_examples,
+                 batch_size=16,
+                 shuffle=True,
+                 ):
+
+        self.tokenizer = tokenizer
+        self.model = model
+        self.n_examples = n_examples
+        self.data_filename = data_filename
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+        # Initialize row order, call on_epoch_end to shuffle row indices
+        self.row_order = np.arange(1, self.n_examples + 1)
+        self.on_epoch_end()
+
+    def __len__(self):
+        # Return the number of batches in the full dataset
+        return self.n_examples // self.batch_size
+
+    def __getitem__(self, idx):
+        batch_start = idx * self.batch_size
+        batch_end = (idx + 1) * self.batch_size
+
+        # Indices to skip are the ones in the shuffled row_order before and
+        # after the chunk we'll use for this batch
+        batch_idx_skip = self.row_order[:batch_start] + self.row_order[batch_end:]
+        df = pd.read_csv(self.data_filename, skiprows=batch_idx_skip)
+
+        text_pairs = (df['question'].values.astype(str).tolist(), df['answer'].values.astype(str).tolist())
+        batch_data = preprocess_data(text_pairs, self.tokenizer, self.model)
+
+        return batch_data
+
+    def __call__(self):
+        for i in range(self.__len__()):
+            yield self.__getitem__(i)
+
+            if i == self.__len__() - 1:
+                self.on_epoch_end()
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            self.row_order = list(np.random.permutation(self.row_order))
 
 
 class PrepDataset:
@@ -143,7 +220,7 @@ class PrepDataset:
         answer_plus = ', '.join([i for i in list(answer)])
         answer_plus = f"{answer_plus} "
 
-        outputs = {'question': question_plus, 'answer': answer_plus}
+        outputs = {'q': question_plus, 'answer': answer_plus}
         return outputs
 
     @staticmethod
@@ -168,7 +245,7 @@ class PrepDataset:
         question_plus = f"sentence1: {first}"
         question_plus += f" sentence2: {second}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -193,7 +270,7 @@ class PrepDataset:
         question_plus = f"premise: {premise}"
         question_plus += f" hypothesis: {hypothesis}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -217,7 +294,7 @@ class PrepDataset:
         question_plus = f"question: {first}"
         question_plus += f" passage: {second}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -242,7 +319,7 @@ class PrepDataset:
         question_plus = f"question: {first}"
         question_plus += f" passage: {second}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -270,7 +347,7 @@ class PrepDataset:
         question_plus += f" choice1: {c1} choice2: {c2}"
         question_plus += f" premise: {premise}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -295,7 +372,7 @@ class PrepDataset:
         question_plus = f"question: {question}"
         question_plus += f" paragraph: {para}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -329,7 +406,7 @@ class PrepDataset:
         question_plus = f"query: {query}"
         question_plus += f" passage: {passage}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -354,7 +431,7 @@ class PrepDataset:
         question_plus = f"premise: {premise}"
         question_plus += f" hypothesis: {hypothesis}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -379,7 +456,7 @@ class PrepDataset:
         # Adding prompt
         question_plus = f"word: {word} sentence1: {sen1} sentence2: {sen2}"
 
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     @staticmethod
@@ -403,7 +480,7 @@ class PrepDataset:
 
         # Adding prompt
         question_plus = f"word1: {word1} word2: {word2} paragraph: {para}"
-        outputs = {'question': question_plus, 'answer': answer}
+        outputs = {'q': question_plus, 'answer': answer}
         return outputs
 
     def _get_encode(self, which):
@@ -478,15 +555,71 @@ class PrepDataset:
         return dataset
 
     @staticmethod
-    def tokenize(tokenizer, encoder_max_len, decoder_max_len, example):
+    def _shorten_to_length(tokenizer, example):
+        """
 
-        encoder_inputs = tokenizer(example['question'], truncation=True, max_length=encoder_max_len,
-                                   padding="max_length")
+        Args:
+            tokenizer: T5 tokenizer instance
+            example: Example to process
+
+        Returns:
+
+        """
+
+        # This is the max length we would like to tokenize
+        max_length = ENCODER_MAX_LEN - NUM_SOFT_TOKENS
+
+        # This is the number of tokens it will produce without restrictions
+        tokens = tokenizer(example['q'])
+        len_tokens = len(tokens['input_ids'])
+        if len_tokens <= max_length:
+            return {'question': example['q']}
+
+        # Each word is at least one token so start with as many words
+        new_example = example['q'].split(' ')[:max_length]
+
+        while len_tokens > max_length:
+            # Join the example back with space and remove the extra space that was added
+            new_example = ''.join(f"{x} " for x in new_example)[:-1]
+            tokens = tokenizer(new_example)
+            len_tokens = len(tokens['input_ids'])
+
+            if len_tokens > max_length:
+                new_example = new_example.split(' ')[:-1]
+
+        return {'question': new_example}
+
+    @staticmethod
+    def tokenize(tokenizer, is_test, example):
+        """
+        Our objective is not only to tokenize the input but also to ensure that the after soft prompt is included, the
+        embeddings that are removed are all paddings only
+
+        Args:
+            tokenizer: Instance of Autotokenizer initialized appropriately for the checkpoint
+            is_test: Whether this is a test set we are working with
+            example: Example to be tokenized
+
+        Returns:
+        """
+
+        # During testing, only the inputs_ids of the tokens are required
+        if is_test:
+            # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
+            encoder_inputs = tokenizer(example['question'], truncation=True, max_length=ENCODER_MAX_LEN,
+                                       padding="max_length", return_tensors="tf")
+
+            return encoder_inputs['input_ids']
+
+        # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
+        encoder_inputs = tokenizer(example['question'], truncation=True, max_length=ENCODER_MAX_LEN,
+                                   padding="max_length", return_tensors="tf")
+
         if not isinstance(example['answer'], str):
             tmp = str(example['answer']).lower()
         else:
             tmp = str(example['answer'])
-        decoder_inputs = tokenizer(tmp, truncation=True, max_length=decoder_max_len, padding="max_length")
+        decoder_inputs = tokenizer(tmp, truncation=True, max_length=ENCODER_MAX_LEN, padding="max_length")
 
         # Set up to return
         input_ids = encoder_inputs['input_ids']
@@ -505,7 +638,12 @@ class PrepDataset:
         if not isinstance(which, tuple):
             which = (which,)
 
-        # This is the folder where the data will go
+        # Encode it into a question answer format
+        encoder, led = self._get_encode(which)
+
+        # Shorten the text to a length so that there is no truncation from the soft prompt
+        stl = partial(self._shorten_to_length, self.tokenizer)
+
         which_str = ''.join(f'{x}-' for x in which)
         foldername = which_str
         processed_save_path = os.path.join(cache_path, "processed")
@@ -518,10 +656,13 @@ class PrepDataset:
             valid_dataset = load_dataset(*which, split='validation', cache_dir=cache_path)
 
             # Convert it into a question answer format
-            encoder, led = self._get_encode(which)
             remove_columns = [x for x in train_dataset.column_names if x not in ['id', 'idx', 'label']]
             train_dataset = train_dataset.map(encoder, remove_columns=remove_columns)
             valid_dataset = valid_dataset.map(encoder, remove_columns=remove_columns)
+
+            remove_columns = ['q']
+            train_dataset = train_dataset.map(stl, remove_columns=remove_columns)
+            valid_dataset = valid_dataset.map(stl, remove_columns=remove_columns)
 
             train_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/train.csv"))
             valid_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/val.csv"))
@@ -529,12 +670,14 @@ class PrepDataset:
         # Get the test dataset if available
         if not os.path.exists(os.path.join(processed_save_path, f"{foldername}/test.csv")):
             try:
-                encoder, _ = self._get_encode(which)
                 test_dataset = load_dataset(*which, split='test', cache_dir=cache_path)
 
                 # Remove the columns we do not need
                 remove_columns = [x for x in test_dataset.column_names if x not in ['id', 'idx', 'label']]
                 test_dataset = test_dataset.map(encoder, remove_columns=remove_columns)
+
+                remove_columns = ['q']
+                test_dataset = test_dataset.map(stl, remove_columns=remove_columns)
                 test_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
             except ValueError:
                 pass
@@ -558,7 +701,9 @@ class PrepDataset:
         tfsplits = {}
         splits = {}
         counts = {}
-        tokenize = partial(self.tokenize, self.tokenizer, self.encoder_max_len, self.decoder_max_len)
+
+        # Create a partial function with tokenize.
+        tokenize = partial(self.tokenize, self.tokenizer, False)
         for split in ['train', 'val']:
             # Load the data from CSV and tokenize
             splits[split] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/{split}.csv"),
@@ -574,7 +719,7 @@ class PrepDataset:
             # Convert to a dataset
             shuffling = True if split == 'train' else False
             tfsplits[split] = self.create_dataset(tfsplits[split], batch_size=batch_size, shuffling=shuffling,
-                                                cache_path=cache_path)
+                                                  cache_path=cache_path)
 
         try:
             splits['test'] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
@@ -585,7 +730,40 @@ class PrepDataset:
 
         return tfsplits, splits, counts
 
-    def load(self, which: Union[str, tuple], batch_size: int = 10, as_batches: bool = False, cache_path: str = None):
+    def load_as_batches(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
+                        **kwargs):
+        """
+
+        Returns:
+        """
+        if not isinstance(which, tuple):
+            which = (which,)
+
+        model = kwargs['model']
+
+        # This is the folder where the data will go
+        which_str = ''.join(f'{x}-' for x in which)
+        foldername = which_str
+        processed_save_path = os.path.join(cache_path, "processed")
+
+        # Load the dataset from CSV
+        tfsplits = {}
+        splits = {}
+        counts = {}
+
+        # Create a partial function with tokenize.
+        for split in ['train', 'val']:
+            filename = os.path.join(processed_save_path, f"{foldername}/{split}.csv")
+
+            num_samples = pd.read_csv(filename).shape[0]
+
+            # Load the data from CSV and tokenize
+            tfsplits[split] = BatchDataGenerator(tokenizer=self.tokenizer, model=model, n_examples=num_samples,
+                                                 data_filename=filename, batch_size=batch_size)
+        return tfsplits, splits, counts
+
+    def load(self, which: Union[str, tuple], batch_size: int = 10, as_batches: bool = False, cache_path: str = None,
+             **kwargs):
         """
 
         Args:
@@ -600,9 +778,7 @@ class PrepDataset:
         self.encode_and_save(which, cache_path)
 
         if as_batches:
-            raise ValueError('Not implemented')
-            #
-            # train_dataset, val_datset, test_datset = self.load_as_batches()
+            tfsplits, splits, counts = self.load_as_batches(which, batch_size, cache_path, **kwargs)
         else:
             tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path)
 
@@ -614,7 +790,7 @@ if __name__ == '__main__':
     cp = 't5-small'
     dprep = PrepDataset(checkpoint=cp)
     which_d = 'super_glue'
-    cp = os.path.join(os.path.dirname(__file__), "../cache")
+    cache_p = os.path.join(os.path.dirname(__file__), "../cache")
 
     # out = dprep.get(which=which_d, batch_size=100, cache_path=cp)
     # ('super_glue', 'axb'), ('super_glue', 'axg'),
@@ -622,7 +798,5 @@ if __name__ == '__main__':
                ('super_glue', 'record'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc'),
                ('super_glue', 'multirc'), ('super_glue', 'cb'), ('super_glue', 'copa'))
 
-    # for wo in whiches:
-    #     dprep.encode_and_save(wo, cache_path=cp)
-    dprep.load_to_memory(('super_glue', 'boolq'), batch_size=10, cache_path=cp)
-
+    for wo in whiches:
+        dprep.encode_and_save(wo, cache_path=cp)

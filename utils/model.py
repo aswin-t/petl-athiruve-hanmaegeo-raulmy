@@ -10,6 +10,7 @@ from transformers.modeling_tf_utils import unpack_inputs, keras_serializable
 from transformers.utils import ContextManagers
 from transformers.modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput, \
     TFBaseModelOutputWithPastAndCrossAttentions
+from utils.constants import ENCODER_MAX_LEN, DECODER_MAX_LEN
 
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
@@ -662,7 +663,7 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         return {m.name: m.result() for m in self.metrics}
 
 
-class FullFineTune(TFT5ForConditionalGeneration, abc.ABC):
+class FullFineTune(TFT5ForConditionalGeneration):
     def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
         if log_dir or cache_dir:
             pass
@@ -741,3 +742,111 @@ class FullFineTune(TFT5ForConditionalGeneration, abc.ABC):
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, logits)
         return {m.name: m.result() for m in self.metrics}
+
+
+def _get_model(which_model, checkpoint, debug):
+    """
+
+    Args:
+        which_model: Which model to use, FullFineTune or SoftPrompt or ...
+        checkpoint: Which model checkpoint to use
+        debug: If debug is True then model is run in eager model otherwise in graph mode
+
+    Returns:
+
+    """
+
+    input_ids = tf.keras.layers.Input(shape=(ENCODER_MAX_LEN, ), dtype=tf.int32, name='input_ids')
+    attention_mask = tf.keras.Input(shape=(ENCODER_MAX_LEN, ), dtype=tf.int32, name='attention_mask')
+    decoder_input_ids = tf.keras.Input(shape=(ENCODER_MAX_LEN, ), dtype=tf.int32, name='labels')
+
+    if which_model.lower() in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+
+        # learning_rate = 0.001  # Instead set a static learning rate
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.1)
+
+        # Create a model instance
+        model = PETLSoftPrompt.from_pretrained(checkpoint)
+
+        # This makes the embedding layer non-trainable
+        # The layer is called shared because it is shared between the encoder and decoder
+        model.shared.trainable = False
+
+        # We want the soft prompt to be trainable but all other weights must not be trainable
+        for b in model.encoder.block:
+            b.trainable = False
+        model.encoder.final_layer_norm.trainable = False
+
+        # We don't want any trainable parameters in the decode layer
+        model.decoder.trainable = False
+
+    elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
+        # learning_rate = 0.001  # Instead set a static learning rate
+        optimizer = tf.keras.optimizers.experimental.Adam(learning_rate=0.1)
+
+        # Create a model instance
+        # model = FullFineTune.from_pretrained(checkpoint)
+        model = TFT5ForConditionalGeneration.from_pretrained(checkpoint)
+
+    else:
+        raise KeyError(f'Model {which_model} is not supported')
+
+    # Takes these input values and produces an output
+    logits = model(input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)[0]
+    model = tf.keras.models.Model(inputs=[input_ids, attention_mask, decoder_input_ids], outputs=[logits])
+
+    # Compile the model with Categorical accuracy metric
+    model.compile(optimizer=optimizer,
+                  loss=tf.keras.metrics.SparseCategoricalCrossentropy(name='accuracy', from_logits=True),
+                  run_eagerly=debug)
+    return model
+
+
+def get_model(which_model, checkpoint, debug):
+    """
+
+    Args:
+        which_model: Which model to use, FullFineTune or SoftPrompt or ...
+        checkpoint: Which model checkpoint to use
+        debug: If debug is True then model is run in eager model otherwise in graph mode
+
+    Returns:
+
+    """
+
+    if which_model.lower() in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+
+        # learning_rate = 0.001  # Instead set a static learning rate
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.1)
+
+        # Create a model instance
+        model = PETLSoftPrompt.from_pretrained(checkpoint)
+
+        # This makes the embedding layer non-trainable
+        # The layer is called shared because it is shared between the encoder and decoder
+        model.shared.trainable = False
+
+        # We want the soft prompt to be trainable but all other weights must not be trainable
+        for b in model.encoder.block:
+            b.trainable = False
+        model.encoder.final_layer_norm.trainable = False
+
+        # We don't want any trainable parameters in the decode layer
+        model.layers[2].trainable = False
+
+    elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
+        # learning_rate = 0.001  # Instead set a static learning rate
+        optimizer = tf.keras.optimizers.experimental.Adam(learning_rate=0.1)
+
+        # Create a model instance
+        model = FullFineTune.from_pretrained(checkpoint)
+
+    else:
+        raise KeyError(f'Model {which_model} is not supported')
+
+    # Compile the model with Categorical accuracy metric
+    model.compile(optimizer=optimizer,
+                  loss=tf.keras.metrics.SparseCategoricalCrossentropy(name='scc', from_logits=True),
+                  metrics=tf.keras.metrics.SparseTopKCategoricalAccuracy(name='accuracy', k=1),
+                  run_eagerly=debug)
+    return model
