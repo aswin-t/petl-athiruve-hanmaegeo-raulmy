@@ -1,5 +1,6 @@
 import os
 import random
+import constants
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -7,7 +8,6 @@ from typing import Union
 from functools import partial
 from transformers import AutoTokenizer
 from datasets import load_dataset, Dataset
-from constants import ENCODER_MAX_LEN, DECODER_MAX_LEN, NUM_SOFT_TOKENS
 
 
 class LabelEncodeDecode:
@@ -16,18 +16,30 @@ class LabelEncodeDecode:
         if which[0] == 'super_glue':
             if which[1] in ['axb', 'axg']:
                 self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 6
             elif which[1] in ['boolq', 'rte', 'wic', 'wsc', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
+                # True and False are both one token each
+                constants.DECODER_MAX_LEN = 2
             elif which[1] == 'cb':
                 self.lookup = {0: 'entailment', 1: 'contradiction', 2: 'neutral', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 6
             elif which[1] == 'copa':
                 self.lookup = {0: 'choice1', 1: 'choice2', -1: 'test'}
+                # choice1 and choice2  are 2 tokens long plus one end of sequence is 3
+                constants.DECODER_MAX_LEN = 3
             else:
                 self.lookup = {}
+                # This is a longer answer and requires 50
+                constants.DECODER_MAX_LEN = 50
         elif which[0] == 'glue':
             raise KeyError('Not implemented')
         else:
             self.lookup = {}
+            # This is a longer answer and requires 50
+            constants.DECODER_MAX_LEN = 50
 
     def __call__(self, inlabel, *args, **kwargs):
         return str(self.from_label(inlabel))
@@ -72,13 +84,13 @@ def preprocess_data(text_pairs, tokenizer, model):
 
     """
     orig_text = text_pairs[0]
-    orig_encoded = tokenizer.batch_encode_plus(orig_text, max_length=ENCODER_MAX_LEN, padding='max_length',
+    orig_encoded = tokenizer.batch_encode_plus(orig_text, max_length=constants.ENCODER_MAX_LEN, padding='max_length',
                                                truncation=True, return_attention_mask=True, return_tensors='tf')
     orig_input_ids = np.array(orig_encoded["input_ids"], dtype="int32")
     orig_attention_masks = np.array(orig_encoded["attention_mask"], dtype="int32")
 
     target_text = text_pairs[1]
-    target_encoded = tokenizer.batch_encode_plus(target_text, max_length=DECODER_MAX_LEN, padding='max_length',
+    target_encoded = tokenizer.batch_encode_plus(target_text, max_length=constants.DECODER_MAX_LEN, padding='max_length',
                                                  truncation=True, return_tensors='tf')
 
     # Decoder needs it shifted
@@ -141,7 +153,8 @@ class BatchDataGenerator(tf.keras.utils.Sequence):
 
 class PrepDataset:
 
-    def __init__(self, checkpoint: str, encoder_max_len=ENCODER_MAX_LEN, decoder_max_len=DECODER_MAX_LEN):
+    def __init__(self, checkpoint: str, encoder_max_len=constants.ENCODER_MAX_LEN,
+                 decoder_max_len=constants.DECODER_MAX_LEN):
         """
 
         Args:
@@ -200,6 +213,7 @@ class PrepDataset:
         Returns:
 
         """
+
         if led:
             pass
 
@@ -258,7 +272,6 @@ class PrepDataset:
 
         Returns:
         """
-
         # Context for answering the question
         premise = example['premise']
         hypothesis = example['hypothesis']
@@ -307,7 +320,6 @@ class PrepDataset:
 
         Returns:
         """
-
         # Context for answering the question
         first = example['premise']
         second = example['hypothesis']
@@ -332,7 +344,6 @@ class PrepDataset:
 
         Returns:
         """
-
         # Context for answering the question
         question = example['question']
         c1 = example['choice1']
@@ -360,7 +371,6 @@ class PrepDataset:
 
         Returns:
         """
-
         # Context for answering the question
         question = example['question']
         para = example['paragraph']
@@ -419,7 +429,6 @@ class PrepDataset:
 
         Returns:
         """
-
         # Context for answering the question
         premise = example['premise']
         hypothesis = example['hypothesis']
@@ -428,8 +437,8 @@ class PrepDataset:
         answer = led(example['label'])
 
         # Adding prompt
-        question_plus = f"premise: {premise}"
-        question_plus += f" hypothesis: {hypothesis}"
+        question_plus = f" hypothesis: {hypothesis}"
+        question_plus += f"premise: {premise}"
 
         outputs = {'q': question_plus, 'answer': answer}
         return outputs
@@ -444,7 +453,6 @@ class PrepDataset:
 
         Returns:
         """
-
         # Context for answering the question
         sen1 = example['sentence1']
         sen2 = example['sentence2']
@@ -469,7 +477,6 @@ class PrepDataset:
 
         Returns:
         """
-
         # Context for answering the question
         para = example['text']
         word1 = example['span1_text']
@@ -567,7 +574,7 @@ class PrepDataset:
         """
 
         # This is the max length we would like to tokenize
-        max_length = ENCODER_MAX_LEN - NUM_SOFT_TOKENS
+        max_length = constants.ENCODER_MAX_LEN - constants.NUM_SOFT_TOKENS
 
         # This is the number of tokens it will produce without restrictions
         tokens = tokenizer(example['q'])
@@ -603,29 +610,25 @@ class PrepDataset:
         Returns:
         """
 
-        # During testing, only the inputs_ids of the tokens are required
-        if is_test:
-            # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
-            encoder_inputs = tokenizer(example['question'], truncation=True, max_length=ENCODER_MAX_LEN,
-                                       padding="max_length", return_tensors="tf")
-
-            return encoder_inputs['input_ids']
-
         # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
-        encoder_inputs = tokenizer(example['question'], truncation=True, max_length=ENCODER_MAX_LEN,
+        encoder_inputs = tokenizer(example['question'], truncation=True, max_length=constants.ENCODER_MAX_LEN,
                                    padding="max_length", return_tensors="tf")
+
+        if is_test:
+            return encoder_inputs['input_ids']
 
         if not isinstance(example['answer'], str):
             tmp = str(example['answer']).lower()
         else:
             tmp = str(example['answer'])
-        decoder_inputs = tokenizer(tmp, truncation=True, max_length=ENCODER_MAX_LEN, padding="max_length")
+        decoder_inputs = tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN, padding="max_length",
+                                   return_tensors="tf")
 
         # Set up to return
-        input_ids = encoder_inputs['input_ids']
-        input_attention = encoder_inputs['attention_mask']
-        target_ids = decoder_inputs['input_ids']
-        target_attention = decoder_inputs['attention_mask']
+        input_ids = encoder_inputs['input_ids'][0]
+        input_attention = encoder_inputs['attention_mask'][0]
+        target_ids = decoder_inputs['input_ids'][0]
+        target_attention = decoder_inputs['attention_mask'][0]
 
         return {'input_ids': input_ids, 'attention_mask': input_attention, 'labels': target_ids,
                 'decoder_attention_mask': target_attention}
@@ -639,6 +642,7 @@ class PrepDataset:
             which = (which,)
 
         # Encode it into a question answer format
+        # It also set the value for teh DECODE_MAX_LENGTH based on the answer type
         encoder, led = self._get_encode(which)
 
         # Shorten the text to a length so that there is no truncation from the soft prompt
@@ -714,12 +718,8 @@ class PrepDataset:
             counts[split] = len(splits[split])
 
             # Convert to TensorFlow dataset
-            tfsplits[split] = self._to_tf_dataset(tfsplits[split])
-
-            # Convert to a dataset
-            shuffling = True if split == 'train' else False
-            tfsplits[split] = self.create_dataset(tfsplits[split], batch_size=batch_size, shuffling=shuffling,
-                                                  cache_path=cache_path)
+            tfsplits[split] = tfsplits[split].to_tf_dataset(
+                batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'])
 
         try:
             splits['test'] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
