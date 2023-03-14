@@ -86,9 +86,10 @@ def run_one_split(model_config: dict = None, optimizer_params: dict = None, whic
 
     # Create a log object
     logger = create_logger(output_path, filename='model_logs.log')
+    logger.info(f'This evaluation tag is {tag}')
 
     # Get the model from the
-    model, _ = get_model(which_model, model_checkpoint, debug, optimizer_params, logger)
+    model, official_name = get_model(which_model, model_checkpoint, debug, optimizer_params, logger)
     model.summary()
 
     # Prepare the Dataset
@@ -99,7 +100,7 @@ def run_one_split(model_config: dict = None, optimizer_params: dict = None, whic
     # Ready to train the model
     history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[], validation_data=tfsplits['val'],
                         initial_epoch=0)
-    model_history_to_dlog(logger, history.history, which_model)
+    model_history_to_dlog(logger, history.history, official_name)
     results = evaluate_metric(which_data, model_checkpoint, model, splits['val'])
 
     return results
@@ -109,7 +110,7 @@ if __name__ == '__main__':
     cp = os.path.join(os.path.dirname(__file__), "../cache")
     op = os.path.join(os.path.dirname(__file__), "../checkpoints")
 
-    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 10}
+    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 1}
     optim_params = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
     w_data = ('super_glue', 'boolq')
     model_o = run_one_split(model_config=model_configo, optimizer_params=optim_params, which_data=w_data,

@@ -760,17 +760,16 @@ def model_history_to_dlog(logger, history, model_name):
         logger.info(f'{iteration + 1},{loss},{val_loss},{accuracy},{val_accuracy}')
 
 
-def _model_structure_to_dlog(logger, model, model_name):
+def _model_structure_to_dlog(logger, model):
     """
 
     Args:
         logger: Logger object
         model: Model to summarize
-        model_name: Name of model to summarize
 
     Returns:
     """
-    strng = f'Model {model_name} summary:'
+    strng = f'Summary:'
     logger.info(strng)
 
     stringlist = []
@@ -822,7 +821,7 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, ):
 
         # We don't want any trainable parameters in the decode layer
         model.layers[2].trainable = False
-        _model_structure_to_dlog(logger, model, model_name='PETLSoftPrompt')
+        _model_structure_to_dlog(logger, model)
 
     elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
         logger.info(f'Loading FullFineTune model')
@@ -832,7 +831,7 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, ):
         model = FullFineTune.from_pretrained(checkpoint)
 
         # Save the model structure to the datalog
-        _model_structure_to_dlog(logger, model, model_name='FullFineTune')
+        _model_structure_to_dlog(logger, model)
     else:
         raise KeyError(f'Model {which_model} is not supported')
 
