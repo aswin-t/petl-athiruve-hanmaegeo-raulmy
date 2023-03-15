@@ -774,11 +774,14 @@ class PrepDataset:
         Returns:
 
         """
+        if kwargs:
+            pass
+
         # Ensure the dataset exists and is processed
         self.encode_and_save(which, cache_path)
 
         if as_batches:
-            tfsplits, splits, counts = self.load_as_batches(which, batch_size, cache_path, **kwargs)
+            raise NotImplementedError('Loading as batches is not implemented')
         else:
             tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path)
 

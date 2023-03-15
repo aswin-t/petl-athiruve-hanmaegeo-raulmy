@@ -23,10 +23,12 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
-def evaluate_metric(which, checkpoint, model, val_split, batch_size=100):
+def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size=100):
     """
 
     Args:
+        logger: Logger object
+        tag: Evaluation tag string
         which: Which dataset are we evaluating
         model: Model object
         checkpoint: Tokenizer to use
@@ -48,8 +50,8 @@ def evaluate_metric(which, checkpoint, model, val_split, batch_size=100):
         raise ValueError(f'Unsupported metric type: {which}')
 
     # These are the questions we want answered
-    idx = [x['idx'] for x in val_split]
-    questions = [x['question'] for x in val_split]
+    # idx = [x['idx'] for x in val_split]
+    # questions = [x['question'] for x in val_split]
     tokens = [tokenize(x).numpy().tolist()[0] for x in val_split]
     references = [x['label'] for x in val_split]
 
@@ -64,5 +66,6 @@ def evaluate_metric(which, checkpoint, model, val_split, batch_size=100):
     predictions = [led[x] for x in text_predictions]
     results = metric.compute(predictions=predictions, references=references)
 
-    print(results)
+    res_str = "".join(f'{k},{v}' for k, v in results.items())
+    logger.info(f'Results:{tag},{res_str}')
     return results

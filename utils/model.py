@@ -778,16 +778,17 @@ def _model_structure_to_dlog(logger, model):
         logger.info(strng)
 
 
-def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, ):
+def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, checkpoint_file: str = ''):
     """
 
     Args:
-        which_model: Which model to use, FullFineTune or SoftPrompt or ...
+        which_model: Which model to use, fft or soft or ...
         checkpoint: Which model checkpoint to use
         optimizer_params: Optimizer parameters
 
         debug: If debug is True then model is run in eager model otherwise in graph mode
         logger: Logger for logging progress
+        checkpoint_file: File to load checkpoint, if available
     Returns:
     """
 
@@ -809,6 +810,8 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, ):
 
         # Create a model instance
         model = PETLSoftPrompt.from_pretrained(checkpoint)
+        if checkpoint_file:
+            model.load_weights(checkpoint_file, by_name=True, skip_mismatch=True)
 
         # This makes the embedding layer non-trainable
         # The layer is called shared because it is shared between the encoder and decoder
@@ -829,6 +832,8 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, ):
 
         # Create a model instance
         model = FullFineTune.from_pretrained(checkpoint)
+        if checkpoint_file:
+            model.load_weights(checkpoint_file, by_name=True, skip_mismatch=True)
 
         # Save the model structure to the datalog
         _model_structure_to_dlog(logger, model)
