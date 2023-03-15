@@ -1,6 +1,5 @@
 import os
 import random
-import constants
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -8,6 +7,7 @@ from typing import Union
 from functools import partial
 from transformers import AutoTokenizer
 from datasets import load_dataset, Dataset
+from utils import constants
 
 
 class LabelEncodeDecode:

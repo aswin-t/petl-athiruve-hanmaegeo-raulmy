@@ -1,8 +1,8 @@
 import evaluate
 import tensorflow as tf
 from functools import partial
-from constants import ENCODER_MAX_LEN
 from transformers import AutoTokenizer
+from utils.constants import ENCODER_MAX_LEN
 from utils.data import LabelEncodeDecode, PrepDataset
 
 
