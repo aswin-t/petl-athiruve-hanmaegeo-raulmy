@@ -132,7 +132,7 @@ def run_one_split(model_config: dict = None, optimizer_params: dict = None, whic
     tag = _create_file_tag(model_checkpoint, which_model, which_data, epochs, optimizer_params)
     if prefix:
         tag = prefix + '-' + tag
-    filen, start_epoch = load_checkpoint(tag, op, load_best=False)
+    filen, start_epoch = load_checkpoint(tag, output_path, load_best=False)
     if start_epoch >= epochs:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
         return True
