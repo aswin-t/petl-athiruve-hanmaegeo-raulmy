@@ -1,4 +1,7 @@
+import os
 from utils import constants
+from utils.data import PrepDataset
+from utils.log import create_logger
 from transformers import AutoTokenizer
 
 
@@ -28,5 +31,28 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
         print(pair, max_)
 
 
+def text_encode_and_save():
+    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    cache_path = os.path.join(os.path.dirname(__file__), "../cache")
+    model_checkpoint = 't5-small'
+
+    # Create a log object
+    logger = create_logger(output_path, filename='data_text_encode.log')
+
+    # Prepare the Dataset
+    dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
+
+    # out = dprep.get(which=which_d, batch_size=100, cache_path=cp)
+    # ('super_glue', 'axb'), ('super_glue', 'axg'),
+    whiches = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
+               ('super_glue', 'record'),  ('super_glue', 'multirc'),
+               ('super_glue', 'cb'), ('super_glue', 'copa'))
+
+    for wo in whiches:
+        dprep.encode_and_save(wo, cache_path=cache_path)
+
+
 if __name__ == '__main__':
-    check_tokenizer_lengths(checkpoint='t5-small')
+    # check_tokenizer_lengths(checkpoint='t5-small')
+    text_encode_and_save()
+

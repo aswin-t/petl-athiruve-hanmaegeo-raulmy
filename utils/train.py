@@ -143,7 +143,7 @@ def run_one_split(model_config: dict = None, optimizer_params: dict = None, whic
 
     # 3. Prepare the data
     # Prepare the Dataset
-    dprep = PrepDataset(checkpoint=model_checkpoint)
+    dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path)
 
     # 4. Get the model
@@ -160,7 +160,7 @@ def run_one_split(model_config: dict = None, optimizer_params: dict = None, whic
 
     # Save history and metrics
     model_history_to_dlog(logger, history.history, official_name)
-    results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['val'])
+    results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
 
     return results
 
@@ -171,7 +171,7 @@ if __name__ == '__main__':
 
     model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 1}
     optim_params = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
-    w_data = ('super_glue', 'record')
+    w_data = ('super_glue', 'boolq')
     pref = 'test-'
     model_o = run_one_split(model_config=model_configo, optimizer_params=optim_params, which_data=w_data,
                             batch_size=10, cache_path=cp, output_path=op, debug=False, prefix=pref)

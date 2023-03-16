@@ -11,6 +11,7 @@ from utils import constants
 class LabelEncodeDecode:
 
     def __init__(self, which):
+        self.which = which
         if which[0] == 'super_glue':
             if which[1] in ['axb', 'axg']:
                 self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
@@ -18,7 +19,7 @@ class LabelEncodeDecode:
                 constants.DECODER_MAX_LEN = 6
             elif which[1] in ['boolq', 'rte', 'wic', 'wsc', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
-                # self.lookup = {0: 'absolute truth', 1: 'terrible lie', -1: 'test test'}
+                # self.lookup = {0: 'absolute truth', 1: 'terrible lie', -1: 'test1 test2'}
                 # True and False are both one token each
                 constants.DECODER_MAX_LEN = 2
             elif which[1] == 'cb':
@@ -32,7 +33,7 @@ class LabelEncodeDecode:
             else:
                 self.lookup = {}
                 # This is a longer answer and requires 50
-                constants.DECODER_MAX_LEN = 50
+                constants.DECODER_MAX_LEN = 20
         elif which[0] == 'glue':
             if which[1] in ['qnli', 'rte', 'wnli']:
                 self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
@@ -101,16 +102,18 @@ class LabelEncodeDecode:
 
 class PrepDataset:
 
-    def __init__(self, checkpoint: str, encoder_max_len=constants.ENCODER_MAX_LEN,
+    def __init__(self, logger, checkpoint: str, encoder_max_len=constants.ENCODER_MAX_LEN,
                  decoder_max_len=constants.DECODER_MAX_LEN):
         """
 
         Args:
+            logger: Object of python logging class
             checkpoint: Checkpoint from which to load the model
             encoder_max_len: Maximum token length for encoder
             decoder_max_len: Maximum length for decoder
         """
 
+        self.logger = logger
         self.encoder_max_len = encoder_max_len
         self.decoder_max_len = decoder_max_len
 
@@ -186,257 +189,230 @@ class PrepDataset:
         return outputs
 
     @staticmethod
-    def encode_super_glue_axb(led, example):
+    def encode_super_glue(led, example):
         """
 
         Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
+            led:
+            example:
 
         Returns:
         """
+        if led.which[1] == 'axb':
+            # Context for answering the question
+            first = example['sentence1']
+            second = example['sentence2']
 
-        # Context for answering the question
-        first = example['sentence1']
-        second = example['sentence2']
+            # Convert the numeric label to text
+            answer = led(example['label'])
 
-        # Convert the numeric label to text
-        answer = led(example['label'])
+            # Adding prompt
+            question_plus = f"sentence1: {first}"
+            question_plus += f" sentence2: {second}"
 
-        # Adding prompt
-        question_plus = f"sentence1: {first}"
-        question_plus += f" sentence2: {second}"
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] in ['axg', 'cb', 'rte']:
+            # Context for answering the question
+            premise = example['premise']
+            hypothesis = example['hypothesis']
 
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
+            # Convert the numeric label to text
+            answer = led(example['label'])
+
+            # Adding prompt
+            question_plus = f"hypothesis: {hypothesis}"
+            question_plus += f" premise: {premise}"
+
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'boolq':
+            # Context for answering the question
+            first = example['question']
+            second = example['passage']
+
+            # Convert integer to text
+            answer = led(example['label'])
+
+            # Adding prompt
+            question_plus = f"question: {first}"
+            question_plus += f" passage: {second}"
+
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'copa':
+            # Context for answering the question
+            question = example['question']
+            c1 = example['choice1']
+            c2 = example['choice2']
+            premise = example['premise']
+
+            # Convert integer to text
+            answer = led(example['label'])
+
+            # Adding prompt
+            question_plus = f"question: {question}"
+            question_plus += f" choice1: {c1} choice2: {c2}"
+            question_plus += f" premise: {premise}"
+
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'multirc':
+            # Context for answering the question
+            question = example['question']
+            para = example['paragraph']
+
+            # Convert integer to text
+            answer = led(example['label'])
+
+            # Adding prompt
+            question_plus = f"question: {question}"
+            question_plus += f" paragraph: {para}"
+
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'record':
+            # Context for answering the question
+            passage = example['passage']
+
+            # Does replacing this with extra id work better?
+            # Do not know but it might be worth trying
+            query = example['query']
+            query = query.replace('@placeholder', '<extra_id_0>')
+
+            # Convert integer to text
+            # shortest_answer = [len(x) for x in example['answers']]
+            # idx = shortest_answer.index(min(shortest_answer))
+            # answer = example['answers'][idx]
+            answer = ', '.join([i for i in list(example['answers'])])
+
+            # Adding prompt
+            question_plus = f"query: {query}"
+            question_plus += f" passage: {passage}"
+
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'rte':
+            # Context for answering the question
+            premise = example['premise']
+            hypothesis = example['hypothesis']
+
+            # Convert the numeric label to text
+            answer = led(example['label'])
+
+            # Adding prompt
+            question_plus = f"hypothesis: {hypothesis}"
+            question_plus += f" premise: {premise}"
+
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'wic':
+            # Context for answering the question
+            sen1 = example['sentence1']
+            sen2 = example['sentence2']
+            word = example['word']
+
+            # Convert the numeric label to text
+            answer = led(example['label'])
+
+            # Adding prompt
+            question_plus = f"word: {word} sentence1: {sen1} sentence2: {sen2}"
+
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'wsc.fixed':
+            # Context for answering the question
+            para = example['text']
+            span1 = example['span1_text']
+            span2 = example['span2_text']
+
+            # Convert the numeric label to text
+            answer = led(example['label'])
+
+            # Adding prompt
+            question_plus = f"span1: {span1} span2: {span2} paragraph: {para}"
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        else:
+            raise KeyError('Unknown datatype for translation')
 
     @staticmethod
-    def encode_super_glue_axg(led, example):
+    def encode_glue(led, example):
         """
 
         Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
+            led:
+            example:
 
         Returns:
         """
-        # Context for answering the question
-        premise = example['premise']
-        hypothesis = example['hypothesis']
+        if led.which[1] in ['cola', 'sst2']:
+            sentence = example['sentence']
+            question_plus = f"sentence: {sentence}"
 
-        # Convert the numeric label to text
-        answer = led(example['label'])
+            # Convert the numeric label to text
+            answer = led(example['label'])
 
-        # Adding prompt
-        question_plus = f"premise: {premise}"
-        question_plus += f" hypothesis: {hypothesis}"
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] == 'mnli':
+            # Context for answering the question
+            premise = example['premise']
+            hypothesis = example['hypothesis']
 
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
+            # Convert the numeric label to text
+            answer = led(example['label'])
 
-    @staticmethod
-    def encode_super_glue_boolq(led, example):
-        """
+            # Adding prompt
+            question_plus = f"hypothesis: {hypothesis}"
+            question_plus += f" premise: {premise}"
 
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] in ['mrpc', 'rte']:
+            # Context for answering the question
+            first = example['sentence1']
+            second = example['sentence2']
 
-        Returns:
-        """
-        # Context for answering the question
-        first = example['question']
-        second = example['passage']
+            # Convert the numeric label to text
+            answer = led(example['label'])
 
-        # Convert integer to text
-        answer = led(example['label'])
+            # Adding prompt
+            question_plus = f"sentence1: {first}"
+            question_plus += f" sentence2: {second}"
 
-        # Adding prompt
-        question_plus = f"question: {first}"
-        question_plus += f" passage: {second}"
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] in 'qnli':
+            # Context for answering the question
+            first = example['question']
+            second = example['sentence']
 
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
+            # Convert integer to text
+            answer = led(example['label'])
 
-    @staticmethod
-    def encode_super_glue_cb(led, example):
-        """
+            # Adding prompt
+            question_plus = f"question: {first}"
+            question_plus += f" sentence: {second}"
 
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        elif led.which[1] in 'qqp':
+            # Context for answering the question
+            first = example['question1']
+            second = example['question2']
 
-        Returns:
-        """
-        # Context for answering the question
-        first = example['premise']
-        second = example['hypothesis']
+            # Convert integer to text
+            answer = led(example['label'])
 
-        # Convert integer to text
-        answer = led(example['label'])
+            # Adding prompt
+            question_plus = f"question1: {first}"
+            question_plus += f" question2: {second}"
 
-        # Adding prompt
-        question_plus = f"question: {first}"
-        question_plus += f" passage: {second}"
-
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
-
-    @staticmethod
-    def encode_super_glue_copa(led, example):
-        """
-
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
-
-        Returns:
-        """
-        # Context for answering the question
-        question = example['question']
-        c1 = example['choice1']
-        c2 = example['choice2']
-        premise = example['premise']
-
-        # Convert integer to text
-        answer = led(example['label'])
-
-        # Adding prompt
-        question_plus = f"question: {question}"
-        question_plus += f" choice1: {c1} choice2: {c2}"
-        question_plus += f" premise: {premise}"
-
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
-
-    @staticmethod
-    def encode_super_glue_multirc(led, example):
-        """
-
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
-
-        Returns:
-        """
-        # Context for answering the question
-        question = example['question']
-        para = example['paragraph']
-
-        # Convert integer to text
-        answer = led(example['label'])
-
-        # Adding prompt
-        question_plus = f"question: {question}"
-        question_plus += f" paragraph: {para}"
-
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
-
-    @staticmethod
-    def encode_super_glue_record(led, example):
-        """
-
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
-
-        Returns:
-        """
-        if led:
-            pass
-
-        # Context for answering the question
-        passage = example['passage']
-
-        # Does replacing this with extra id work better?
-        # Do not know but it might be worth trying
-        query = example['query']
-        query = query.replace('@placeholder', '<extra_id_0>')
-
-        # Convert integer to text
-        # shortest_answer = [len(x) for x in example['answers']]
-        # idx = shortest_answer.index(min(shortest_answer))
-        # answer = example['answers'][idx]
-        answer = ', '.join([i for i in list(example['answers'])])
-
-        # Adding prompt
-        question_plus = f"query: {query}"
-        question_plus += f" passage: {passage}"
-
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
-
-    @staticmethod
-    def encode_super_glue_rte(led, example):
-        """
-
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
-
-        Returns:
-        """
-        # Context for answering the question
-        premise = example['premise']
-        hypothesis = example['hypothesis']
-
-        # Convert the numeric label to text
-        answer = led(example['label'])
-
-        # Adding prompt
-        question_plus = f" hypothesis: {hypothesis}"
-        question_plus += f"premise: {premise}"
-
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
-
-    @staticmethod
-    def encode_super_glue_wic(led, example):
-        """
-
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
-
-        Returns:
-        """
-        # Context for answering the question
-        sen1 = example['sentence1']
-        sen2 = example['sentence2']
-        word = example['word']
-
-        # Convert the numeric label to text
-        answer = led(example['label'])
-
-        # Adding prompt
-        question_plus = f"word: {word} sentence1: {sen1} sentence2: {sen2}"
-
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
-
-    @staticmethod
-    def encode_super_glue_wsc(led, example):
-        """
-
-        Args:
-            led: Object of LabelEncodeDecode
-            example: The example to encode
-
-        Returns:
-        """
-        # Context for answering the question
-        para = example['text']
-        word1 = example['span1_text']
-        word2 = example['span2_text']
-
-        # Convert the numeric label to text
-        answer = led(example['label'])
-
-        # Adding prompt
-        question_plus = f"word1: {word1} word2: {word2} paragraph: {para}"
-        outputs = {'q': question_plus, 'answer': answer}
-        return outputs
+            outputs = {'q': question_plus, 'answer': answer}
+            return outputs
+        else:
+            raise KeyError('Unknown datatype for translation')
 
     def _get_encode(self, which):
         """
@@ -452,37 +428,13 @@ class PrepDataset:
         led = LabelEncodeDecode(which)
 
         if which[0] == 'super_glue':
-            if which[1] in 'axb':
-                f = self.encode_super_glue_axb
-            elif which[1] == 'axg':
-                f = self.encode_super_glue_axg
-            elif which[1] in 'boolq':
-                f = self.encode_super_glue_boolq
-            elif which[1] in 'rte':
-                f = self.encode_super_glue_rte
-            elif which[1] in 'wic':
-                f = self.encode_super_glue_wic
-            elif which[1] in 'wsc':
-                f = self.encode_super_glue_wsc
-            elif which[1] in 'multirc':
-                f = self.encode_super_glue_multirc
-            elif which[1] == 'cb':
-                f = self.encode_super_glue_cb
-            elif which[1] == 'copa':
-                f = self.encode_super_glue_copa
-            elif which[1] == 'record':
-                f = self.encode_super_glue_record
-            else:
-                raise KeyError(f'Unexpected super glue dataset {which[1]}')
-        elif which[0] == 'squad':
-            f = self.encode_squad
+            return partial(self.encode_super_glue, led), led
         elif which[0] == 'glue':
-            raise KeyError('Glue not implemented')
+            return partial(self.encode_glue, led), led
+        elif which[0] == 'squad':
+            return self.encode_squad, led
         else:
             raise KeyError(f'Unsupported dataset {which[0]}')
-
-        # Return
-        return partial(f, led), led
 
     @staticmethod
     def create_dataset(dataset, batch_size=4, buffer_size=1000, shuffling=True, cache_path=None):
@@ -589,9 +541,12 @@ class PrepDataset:
         if not isinstance(which, tuple):
             which = (which,)
 
+        self.logger.info(f'Encoding dataset {which}')
+
         # Encode it into a question answer format
         # It also set the value for teh DECODE_MAX_LENGTH based on the answer type
         encoder, led = self._get_encode(which)
+        self.logger.info(f'Using function {encoder} with answer lookup {led.lookup}')
 
         # Shorten the text to a length so that there is no truncation from the soft prompt
         stl = partial(self._shorten_to_length, self.tokenizer)
@@ -607,20 +562,29 @@ class PrepDataset:
             train_dataset = load_dataset(*which, split='train', cache_dir=cache_path)
             valid_dataset = load_dataset(*which, split='validation', cache_dir=cache_path)
 
+            tts = valid_dataset.train_test_split(test_size=0.3)
+            valid_dataset = tts['train']
+            test_dataset = tts['test']
+
             # Convert it into a question answer format
             remove_columns = [x for x in train_dataset.column_names if x not in ['id', 'idx', 'label']]
             train_dataset = train_dataset.map(encoder, remove_columns=remove_columns)
             valid_dataset = valid_dataset.map(encoder, remove_columns=remove_columns)
+            test_dataset = test_dataset.map(encoder, remove_columns=remove_columns)
 
             remove_columns = ['q']
             train_dataset = train_dataset.map(stl, remove_columns=remove_columns)
             valid_dataset = valid_dataset.map(stl, remove_columns=remove_columns)
+            test_dataset = test_dataset.map(stl, remove_columns=remove_columns)
 
             train_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/train.csv"))
             valid_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/val.csv"))
+            test_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
+        else:
+            self.logger.info(f'Decoding was not performed as cache was found')
 
-        # Get the test dataset if available
-        if not os.path.exists(os.path.join(processed_save_path, f"{foldername}/test.csv")):
+        # This is the completely unseen final test
+        if not os.path.exists(os.path.join(processed_save_path, f"{foldername}/ftest.csv")):
             try:
                 test_dataset = load_dataset(*which, split='test', cache_dir=cache_path)
 
@@ -630,7 +594,7 @@ class PrepDataset:
 
                 remove_columns = ['q']
                 test_dataset = test_dataset.map(stl, remove_columns=remove_columns)
-                test_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
+                test_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/ftest.csv"))
             except ValueError:
                 pass
 
@@ -641,6 +605,8 @@ class PrepDataset:
 
         Returns:
         """
+        self.logger.info(f'Loading {which} to memory')
+
         if not isinstance(which, tuple):
             which = (which,)
 
@@ -656,7 +622,7 @@ class PrepDataset:
 
         # Create a partial function with tokenize.
         tokenize = partial(self.tokenize, self.tokenizer, False)
-        for split in ['train', 'val']:
+        for split in ['train', 'val', 'test']:
             # Load the data from CSV and tokenize
             splits[split] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/{split}.csv"),
                                              cache_dir=cache_path)
@@ -670,11 +636,11 @@ class PrepDataset:
                 batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'])
 
         try:
-            splits['test'] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
-            counts['test'] = len(splits['test'])
+            splits['ftest'] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
+            counts['ftest'] = len(splits['test'])
         except FileNotFoundError:
-            splits['test'] = []
-            counts['test'] = 0
+            splits['ftest'] = []
+            counts['ftest'] = 0
 
         return tfsplits, splits, counts
 
@@ -702,20 +668,3 @@ class PrepDataset:
             tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path)
 
         return tfsplits, splits, counts
-
-
-if __name__ == '__main__':
-    # Prepare the Dataset
-    cp = 't5-small'
-    dprep = PrepDataset(checkpoint=cp)
-    which_d = 'super_glue'
-    cache_p = os.path.join(os.path.dirname(__file__), "../cache")
-
-    # out = dprep.get(which=which_d, batch_size=100, cache_path=cp)
-    # ('super_glue', 'axb'), ('super_glue', 'axg'),
-    whiches = ('squad',  ('super_glue', 'boolq'),
-               ('super_glue', 'record'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc'),
-               ('super_glue', 'multirc'), ('super_glue', 'cb'), ('super_glue', 'copa'))
-
-    for wo in whiches:
-        dprep.encode_and_save(wo, cache_path=cp)
