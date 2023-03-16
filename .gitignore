@@ -5,3 +5,4 @@ utils/__pycache__/*
 checkpoints/*.log
 checkpoints/*.hdf5
 transformers/*
+notebooks/.ipynb_checkpoints/*

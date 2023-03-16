@@ -169,9 +169,9 @@ if __name__ == '__main__':
     cp = os.path.join(os.path.dirname(__file__), "../cache")
     op = os.path.join(os.path.dirname(__file__), "../checkpoints")
 
-    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 3}
+    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 1}
     optim_params = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
-    w_data = ('super_glue', 'boolq')
+    w_data = ('super_glue', 'record')
     pref = 'test-'
     model_o = run_one_split(model_config=model_configo, optimizer_params=optim_params, which_data=w_data,
                             batch_size=10, cache_path=cp, output_path=op, debug=False, prefix=pref)

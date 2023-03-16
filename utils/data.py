@@ -1,7 +1,5 @@
 import os
 import random
-import numpy as np
-import pandas as pd
 import tensorflow as tf
 from typing import Union
 from functools import partial
@@ -20,6 +18,7 @@ class LabelEncodeDecode:
                 constants.DECODER_MAX_LEN = 6
             elif which[1] in ['boolq', 'rte', 'wic', 'wsc', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
+                # self.lookup = {0: 'absolute truth', 1: 'terrible lie', -1: 'test test'}
                 # True and False are both one token each
                 constants.DECODER_MAX_LEN = 2
             elif which[1] == 'cb':
@@ -35,7 +34,34 @@ class LabelEncodeDecode:
                 # This is a longer answer and requires 50
                 constants.DECODER_MAX_LEN = 50
         elif which[0] == 'glue':
-            raise KeyError('Not implemented')
+            if which[1] in ['qnli', 'rte', 'wnli']:
+                self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 6
+            elif which[1] in ['sst2', ]:
+                self.lookup = {0: 'negative', 1: 'positive', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 2
+            elif which[1] in ['cola', ]:
+                self.lookup = {0: 'unacceptable', 1: 'acceptable', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 2
+            elif which[1] in ['mrpc', ]:
+                self.lookup = {0: 'equivalent', 1: 'not_equivalent', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 6
+            elif which[1] in ['qqp', ]:
+                self.lookup = {0: 'duplicate', 1: 'not_duplicate', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 6
+            elif which[1] in ['mnli', ]:
+                self.lookup = {0: 'entailment', 1: 'contradiction', 2: 'neutral', -1: 'test'}
+                # not_entailment is 5 tokens long plus one end of sequence is 6
+                constants.DECODER_MAX_LEN = 6
+            else:
+                self.lookup = {}
+                # This is a longer answer and requires 50
+                constants.DECODER_MAX_LEN = 50
         else:
             self.lookup = {}
             # This is a longer answer and requires 50
@@ -71,84 +97,6 @@ class LabelEncodeDecode:
         else:
             # There is no translation involved
             return inpred
-
-
-def preprocess_data(text_pairs, tokenizer, model):
-    """
-
-    Args:
-        text_pairs: Pairs of input and output texts
-        tokenizer:
-        model:
-    Returns:
-
-    """
-    orig_text = text_pairs[0]
-    orig_encoded = tokenizer.batch_encode_plus(orig_text, max_length=constants.ENCODER_MAX_LEN, padding='max_length',
-                                               truncation=True, return_attention_mask=True, return_tensors='tf')
-    orig_input_ids = np.array(orig_encoded["input_ids"], dtype="int32")
-    orig_attention_masks = np.array(orig_encoded["attention_mask"], dtype="int32")
-
-    target_text = text_pairs[1]
-    target_encoded = tokenizer.batch_encode_plus(target_text, max_length=constants.DECODER_MAX_LEN, padding='max_length',
-                                                 truncation=True, return_tensors='tf')
-
-    # Decoder needs it shifted
-    label_ids = np.array(target_encoded['input_ids'])
-    decoder_input_ids = model.layers[-1]._shift_right(label_ids)
-    return [orig_input_ids, orig_attention_masks, decoder_input_ids], label_ids
-
-
-class BatchDataGenerator(tf.keras.utils.Sequence):
-
-    def __init__(self,
-                 tokenizer,
-                 model,
-                 data_filename,
-                 n_examples,
-                 batch_size=16,
-                 shuffle=True,
-                 ):
-
-        self.tokenizer = tokenizer
-        self.model = model
-        self.n_examples = n_examples
-        self.data_filename = data_filename
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-
-        # Initialize row order, call on_epoch_end to shuffle row indices
-        self.row_order = np.arange(1, self.n_examples + 1)
-        self.on_epoch_end()
-
-    def __len__(self):
-        # Return the number of batches in the full dataset
-        return self.n_examples // self.batch_size
-
-    def __getitem__(self, idx):
-        batch_start = idx * self.batch_size
-        batch_end = (idx + 1) * self.batch_size
-
-        # Indices to skip are the ones in the shuffled row_order before and
-        # after the chunk we'll use for this batch
-        batch_idx_skip = self.row_order[:batch_start] + self.row_order[batch_end:]
-        df = pd.read_csv(self.data_filename, skiprows=batch_idx_skip)
-
-        text_pairs = (df['question'].values.astype(str).tolist(), df['answer'].values.astype(str).tolist())
-        batch_data = preprocess_data(text_pairs, self.tokenizer, self.model)
-
-        return batch_data
-
-    def __call__(self):
-        for i in range(self.__len__()):
-            yield self.__getitem__(i)
-
-            if i == self.__len__() - 1:
-                self.on_epoch_end()
-
-    def on_epoch_end(self):
-        if self.shuffle:
-            self.row_order = list(np.random.permutation(self.row_order))
 
 
 class PrepDataset:
@@ -728,38 +676,6 @@ class PrepDataset:
             splits['test'] = []
             counts['test'] = 0
 
-        return tfsplits, splits, counts
-
-    def load_as_batches(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
-                        **kwargs):
-        """
-
-        Returns:
-        """
-        if not isinstance(which, tuple):
-            which = (which,)
-
-        model = kwargs['model']
-
-        # This is the folder where the data will go
-        which_str = ''.join(f'{x}-' for x in which)
-        foldername = which_str
-        processed_save_path = os.path.join(cache_path, "processed")
-
-        # Load the dataset from CSV
-        tfsplits = {}
-        splits = {}
-        counts = {}
-
-        # Create a partial function with tokenize.
-        for split in ['train', 'val']:
-            filename = os.path.join(processed_save_path, f"{foldername}/{split}.csv")
-
-            num_samples = pd.read_csv(filename).shape[0]
-
-            # Load the data from CSV and tokenize
-            tfsplits[split] = BatchDataGenerator(tokenizer=self.tokenizer, model=model, n_examples=num_samples,
-                                                 data_filename=filename, batch_size=batch_size)
         return tfsplits, splits, counts
 
     def load(self, which: Union[str, tuple], batch_size: int = 10, as_batches: bool = False, cache_path: str = None,
