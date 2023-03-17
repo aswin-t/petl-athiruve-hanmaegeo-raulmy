@@ -191,6 +191,7 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
 
     """
     one_task = '' if one_task is None else one_task
+    prefix = prefix + '-' if prefix else prefix
 
     # These are the superglue tasks that we want to perform
     if benchmark == 'glue':
@@ -207,11 +208,11 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
         for task in tasks:
             if task == one_task:
                 break
-    else:
-        raise KeyError(f'Task {one_task} is not in benchmark {benchmark}')
+        else:
+            raise KeyError(f'Task {one_task} is not in benchmark {benchmark}')
 
     # Create a log object
-    logger = create_logger(output_path, filename=f'{prefix}model_super_glue.log')
+    logger = create_logger(output_path, filename=f'{prefix}benchmark_{benchmark}.log')
     logger.info(f'Performing super_glue tuning on {prefix}')
 
     # For each task run the model
@@ -266,7 +267,7 @@ def run_model(model_config: dict = None, debug: bool = False, prefix=''):
 
 
 if __name__ == '__main__':
-    prefixo = 'aswin-'
+    prefixo = 'aswin'
     # Run this model and collect results in log file
     model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 30}
     run_model(model_config=model_configo, debug=False, prefix=prefixo)
