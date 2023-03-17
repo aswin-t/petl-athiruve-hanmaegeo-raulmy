@@ -266,7 +266,7 @@ def run_model(model_config: dict = None, debug: bool = False, prefix=''):
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
     output_path = os.path.join(os.path.dirname(__file__), "../checkpoints")
-    optimizer_params = {'algo': 'adam', 'params': {'learning_rate': 0.0001}}
+    optimizer_params = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
     batch_size = 100
 
     #  Run the superglue benchmnark
@@ -283,7 +283,7 @@ def run_model(model_config: dict = None, debug: bool = False, prefix=''):
 if __name__ == '__main__':
     prefixo = 'aswin'
     # Run this model and collect results in log file
-    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 30}
+    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 30}
     run_model(model_config=model_configo, debug=False, prefix=prefixo)
 
     # Run this model and collect results in log file

@@ -64,6 +64,12 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
 
     # The answers are text, now convert the answers back to labels
     predictions = [led[x] for x in text_predictions]
+
+    # Log the prediction and the reference
+    logger.info('reference,prediction')
+    for r, p in zip(references, predictions):
+        logger.info(f'{r},{p}')
+
     results = metric.compute(predictions=predictions, references=references)
 
     res_str = "".join(f'{k},{v}' for k, v in results.items())
