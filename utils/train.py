@@ -51,7 +51,7 @@ def load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
 
     # Find all filenames that match the current tag
     cur_epoch = -1
-    cur_val = 1E100
+    cur_val = 0
 
     # Empty filename
     filen = ''
@@ -65,7 +65,7 @@ def load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
             epoch = int(pat.group(1))
             val = float(pat.group(2))
 
-            if load_best and val < cur_val:
+            if load_best and val > cur_val:
                 filen = filename
                 cur_epoch = epoch
                 cur_val = val
@@ -117,6 +117,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     Returns:
 
     """
+    model_config = model_config.copy()
 
     # 1. Get and process inputs
     # Get all the inputs for the model
@@ -138,7 +139,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
 
     if start_epoch >= epochs:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
-        return True
+        # return True
 
     logger.info(f'This evaluation tag is {tag}')
 
@@ -154,13 +155,26 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
 
     # 5. Train the model
     checkpoint_filepath = os.path.join(output_path, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
-    model_checkpoint_callback = \
-        tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_filepath, save_weights_only=True)
-    history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_checkpoint_callback, ],
-                        validation_data=tfsplits['val'], initial_epoch=start_epoch)
 
-    # Save history and metrics
-    model_history_to_dlog(logger, history.history, official_name)
+    if start_epoch < epochs:
+        model_checkpoint_callback = \
+            tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_filepath, save_weights_only=True)
+        history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_checkpoint_callback, ],
+                            validation_data=tfsplits['val'], initial_epoch=start_epoch)
+
+        # Save history and metrics
+        model_history_to_dlog(logger, history.history, official_name)
+
+    # Delete the model
+    del model
+    tf.keras.backend.clear_session()
+
+    # 6. Evaluate metric
+    # For evaluating the test metric, load the best model
+    filen, start_epoch = load_checkpoint(tag, output_path, load_best=True)
+    model, official_name = get_model(which_model, model_checkpoint, debug, optimizer_params, logger, filen)
+
+    #
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
 
     return results
@@ -213,7 +227,7 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
 
     # Create a log object
     logger = create_logger(output_path, filename=f'{prefix}benchmark_{benchmark}.log')
-    logger.info(f'Performing super_glue tuning on {prefix}')
+    logger.info(f'Performing {benchmark} tuning')
 
     # For each task run the model
     for task in tasks:
@@ -257,7 +271,7 @@ def run_model(model_config: dict = None, debug: bool = False, prefix=''):
 
     #  Run the superglue benchmnark
     run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
-                  cache_path=cache_path, output_path=output_path, debug=debug,benchmark='superglue',
+                  cache_path=cache_path, output_path=output_path, debug=debug, benchmark='superglue',
                   one_task=None, prefix=prefix)
 
     #  Run the superglue benchmnark
@@ -279,4 +293,3 @@ if __name__ == '__main__':
     # Run this model and collect results in log file
     model_configo = {'model_checkpoint': 't5-large', 'which_model': 'fft', 'epochs': 30}
     run_model(model_config=model_configo, debug=False, prefix=prefixo)
-
