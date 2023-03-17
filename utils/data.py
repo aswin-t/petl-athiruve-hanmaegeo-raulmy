@@ -81,7 +81,7 @@ class LabelEncodeDecode:
             return self.lookup[inlabel]
         else:
             # There is no translation involved
-            return inlabel
+            return str(inlabel)
 
     def to_label(self, inpred):
 
@@ -369,7 +369,7 @@ class PrepDataset:
 
             outputs = {'q': question_plus, 'answer': answer}
             return outputs
-        elif led.which[1] in ['mrpc', 'rte']:
+        elif led.which[1] in ['mrpc', 'rte', 'stsb', 'wnli']:
             # Context for answering the question
             first = example['sentence1']
             second = example['sentence2']
@@ -577,6 +577,10 @@ class PrepDataset:
             valid_dataset = valid_dataset.map(stl, remove_columns=remove_columns)
             test_dataset = test_dataset.map(stl, remove_columns=remove_columns)
 
+            self.logger.info(f'Data sample for train: {train_dataset[0]}')
+            self.logger.info(f'Data sample for validation: {valid_dataset[0]}')
+            self.logger.info(f'Data sample for set: {test_dataset[0]}')
+
             train_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/train.csv"))
             valid_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/val.csv"))
             test_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
@@ -626,6 +630,7 @@ class PrepDataset:
             # Load the data from CSV and tokenize
             splits[split] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/{split}.csv"),
                                              cache_dir=cache_path)
+            self.logger.info(f'Data sample for {split}: {splits[split]}')
 
             # Convert text to tokens
             tfsplits[split] = splits[split].map(tokenize)

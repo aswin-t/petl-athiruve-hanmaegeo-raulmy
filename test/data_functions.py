@@ -43,11 +43,11 @@ def text_encode_and_save():
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
 
     # out = dprep.get(which=which_d, batch_size=100, cache_path=cp)
-    # ('super_glue', 'axb'), ('super_glue', 'axg'),
-    whiches = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
-               ('super_glue', 'record'),  ('super_glue', 'multirc'),
-               ('super_glue', 'cb'), ('super_glue', 'copa'))
-
+    # whiches = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
+    #            ('super_glue', 'record'),  ('super_glue', 'multirc'),
+    #            ('super_glue', 'cb'), ('super_glue', 'copa'))
+    whiches = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
+               ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'stsb'), ('glue', 'wnli'))
     for wo in whiches:
         dprep.encode_and_save(wo, cache_path=cache_path)
 

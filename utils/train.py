@@ -92,12 +92,14 @@ def _create_file_tag(model_checkpoint, which_model, which_data, epochs, optimize
     return tag[:-1]
 
 
-def run_one_split(model_config: dict = None, optimizer_params: dict = None, which_data: Union[str, tuple] = 'squad',
+def run_one_split(logger, model_config: dict = None, optimizer_params: dict = None,
+                  which_data: Union[str, tuple] = 'squad',
                   batch_size: int = 4, cache_path: str = None, output_path: str = None,
                   debug: bool = False, prefix=''):
     """
 
     Args:
+        logger: Object of python logging class
         model_config: Dictionary:
                 'model_checkpoint': <t5-small, t5-base>
                 'which_model': 'fft' -> full fine-tuning of all parameters.
@@ -133,12 +135,11 @@ def run_one_split(model_config: dict = None, optimizer_params: dict = None, whic
     if prefix:
         tag = prefix + '-' + tag
     filen, start_epoch = load_checkpoint(tag, output_path, load_best=False)
+
     if start_epoch >= epochs:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
         return True
 
-    # Create a log object
-    logger = create_logger(output_path, filename='model_logs.log')
     logger.info(f'This evaluation tag is {tag}')
 
     # 3. Prepare the data
@@ -165,13 +166,116 @@ def run_one_split(model_config: dict = None, optimizer_params: dict = None, whic
     return results
 
 
-if __name__ == '__main__':
-    cp = os.path.join(os.path.dirname(__file__), "../cache")
-    op = os.path.join(os.path.dirname(__file__), "../checkpoints")
+def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batch_size: int = 4, cache_path: str = None,
+                  output_path: str = None, debug: bool = False, benchmark='superglue',
+                  one_task: str = None, prefix=''):
+    """
 
-    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 1}
-    optim_params = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
-    w_data = ('super_glue', 'boolq')
-    pref = 'test-'
-    model_o = run_one_split(model_config=model_configo, optimizer_params=optim_params, which_data=w_data,
-                            batch_size=10, cache_path=cp, output_path=op, debug=False, prefix=pref)
+    Args:
+        model_config: Dictionary:
+                'model_checkpoint': <t5-small, t5-base>
+                'which_model': 'fft' -> full fine-tuning of all parameters.
+                               'soft' -> soft prompt is tuned
+                               'librabry' -> library of soft prompts
+                'epochs': <Optional>
+        optimizer_params:
+        batch_size: Number of rows to use per batch
+        cache_path: Path to store the cache files
+        output_path: Path to store the model checkpoints and log file
+        benchmark: Which benchmark to run glue or superglue
+        debug: if True then eager model of evaluation is run, else graph mode
+        one_task: Which superglue task to run
+        prefix: Prefix to add to the model names
+
+    Returns:
+
+    """
+    one_task = '' if one_task is None else one_task
+
+    # These are the superglue tasks that we want to perform
+    if benchmark == 'glue':
+        tasks = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
+                 ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'wnli'), ('glue', 'stsb'))
+    elif benchmark == 'superglue':
+        tasks = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
+                 ('super_glue', 'multirc'), ('super_glue', 'cb'), ('super_glue', 'copa'))
+    else:
+        raise KeyError(f'Benchmark {benchmark} is not supported')
+
+    # Check of the one task is
+    if one_task:
+        for task in tasks:
+            if task == one_task:
+                break
+    else:
+        raise KeyError(f'Task {one_task} is not in benchmark {benchmark}')
+
+    # Create a log object
+    logger = create_logger(output_path, filename=f'{prefix}model_super_glue.log')
+    logger.info(f'Performing super_glue tuning on {prefix}')
+
+    # For each task run the model
+    for task in tasks:
+        # If only one specific task must be run then run that
+        if one_task:
+            if task != one_task:
+                continue
+
+        try:
+            # Run one experiment and log all results
+            # If it fails then carry on
+            run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
+                          batch_size=batch_size, cache_path=cache_path, output_path=output_path, debug=debug,
+                          prefix=prefix)
+        except Exception as e:
+            # Capture the exception and
+            logger.exception(e)
+            logger.warning('Exception was raised')
+
+
+def run_model(model_config: dict = None, debug: bool = False, prefix=''):
+    """
+
+    Args:
+         model_config: Dictionary:
+                'model_checkpoint': <t5-small, t5-base>
+                'which_model': 'fft' -> full fine-tuning of all parameters.
+                               'soft' -> soft prompt is tuned
+                               'library' -> library of soft prompts
+                'epochs': <Optional>
+        debug: if True then eager model of evaluation is run, else graph mode
+        prefix: Prefix to add to the model names
+    Returns:
+
+    """
+
+    cache_path = os.path.join(os.path.dirname(__file__), "../cache")
+    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    optimizer_params = {'algo': 'adam', 'params': {'learning_rate': 0.0001}}
+    batch_size = 100
+
+    #  Run the superglue benchmnark
+    run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
+                  cache_path=cache_path, output_path=output_path, debug=debug,benchmark='superglue',
+                  one_task=None, prefix=prefix)
+
+    #  Run the superglue benchmnark
+    run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
+                  cache_path=cache_path, output_path=output_path, debug=debug, benchmark='glue',
+                  one_task=None, prefix=prefix)
+
+
+if __name__ == '__main__':
+    prefixo = 'aswin-'
+    # Run this model and collect results in log file
+    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 30}
+    run_model(model_config=model_configo, debug=False, prefix=prefixo)
+
+    # Run this model and collect results in log file
+    model_configo = {'model_checkpoint': 't5-base', 'which_model': 'fft', 'epochs': 30}
+    run_model(model_config=model_configo, debug=False, prefix=prefixo)
+
+    # Run this model and collect results in log file
+    model_configo = {'model_checkpoint': 't5-large', 'which_model': 'fft', 'epochs': 30}
+    run_model(model_config=model_configo, debug=False, prefix=prefixo)
+
