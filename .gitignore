@@ -3,6 +3,7 @@ utils/__pycache__/*
 .idea/*
 .ipynb_checkpoints/*
 checkpoints/*.*
+checkpoints/*
 checkpoints/soft_prompt
 transformers/*
 notebooks/.ipynb_checkpoints/*

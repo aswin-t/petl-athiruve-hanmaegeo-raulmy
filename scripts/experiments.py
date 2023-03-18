@@ -8,8 +8,9 @@ def run_one():
     debug = False
     task = ('super_glue', 'boolq')
     prefix = 'experiment'
-    model_config = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 0,
-                    'prompt_transfer': {'model_checkpoint': 't5-small', 'which_data': ('super_glue', 'boolq')}}
+    # model_config = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 0,
+    #                 'prompt_transfer': {'model_checkpoint': 't5-small', 'which_data': ('super_glue', 'boolq')}}
+    model_config = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 1}
     optimizer_params = {'algo': 'adam', 'params': {'learning_rate': 0.0001}}
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")

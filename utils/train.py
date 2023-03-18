@@ -7,7 +7,7 @@ from typing import Union
 from utils.data import PrepDataset
 from utils.log import create_logger
 from utils.metric import evaluate_metric
-from utils.model import get_model, model_history_to_dlog
+from utils.model import get_model, model_history_to_dlog, PromptCallback
 
 os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
 
@@ -36,7 +36,7 @@ def check_config(config, key, default, required):
             return default
 
 
-def load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
+def _load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
     """
 
     Args:
@@ -47,10 +47,10 @@ def load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
 
     """
 
-    strg_chk = re.compile(r'-e(\d+)-v(\d*\.\d*).hdf5')
+    strg_chk = re.compile(r'-e(\d+)-v(\d*\.\d*)\.(hdf5|npy)')
 
     # Find all filenames that match the current tag
-    cur_epoch = -1
+    cur_epoch = 0
     cur_val = 0
 
     # Empty filename
@@ -73,11 +73,10 @@ def load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
                 filen = filename
                 cur_epoch = epoch
                 cur_val = val
-
     return filen, cur_epoch
 
 
-def _create_file_tag(model_checkpoint, which_model, which_data, epochs, optimizer_params):
+def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_params):
     """
 
     Returns: A tag for this unique model configuration
@@ -85,7 +84,6 @@ def _create_file_tag(model_checkpoint, which_model, which_data, epochs, optimize
     """
     tag = model_checkpoint + '-' + which_model + '-'
     tag += "".join(f'{x}-' for x in which_data)
-    tag += f'epochs-{epochs}-'
     tag += f'{optimizer_params["algo"]}-'
     tag += "".join(f'{k}-{v}-' for k, v in optimizer_params['params'].items())
 
@@ -119,7 +117,7 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
     """
 
     # This is a model we want to save the prompts for
-    if which_model in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+    if which_model == 'PETLSoftPrompt':
         filepath = os.path.join(checkpoint_filepath, 'soft_prompt')
 
         #  Make the folder if it does not exist
@@ -149,7 +147,7 @@ def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
     """
 
     # This is a model we want to save the prompts for
-    if which_model in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+    if which_model == 'PETLSoftPrompt':
         # Soft prompt is not requested
         if not (model_checkpoint and which_data):
             return ""
@@ -168,10 +166,44 @@ def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         return ""
 
 
+def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
+    """
+
+    Args:
+        official_name: Official name of the model
+        checkpoint_filepath: Path to save checkpoint
+        tag: Model tag
+
+    Returns:
+
+    """
+
+    if official_name == 'FullFineTune':
+        filepath = os.path.join(checkpoint_filepath, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
+        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=filepath, save_weights_only=True)
+    elif official_name == 'PETLSoftPrompt':
+        filepath = os.path.join(checkpoint_filepath, tag)
+        model_checkpoint_callback = PromptCallback(filepath=filepath, best_is_lower=False)
+    else:
+        raise NotImplementedError(f'Callback for model type {official_name} is not supported')
+
+    return model_checkpoint_callback
+
+
+def _get_model_official_name(which_model):
+
+    if which_model.lower() in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+        model_name = 'PETLSoftPrompt'
+    elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
+        model_name = 'FullFineTune'
+    else:
+        raise NotImplementedError(f'Model {which_model} is not supported')
+    return model_name
+
+
 def run_one_split(logger, model_config: dict = None, optimizer_params: dict = None,
-                  which_data: Union[str, tuple] = 'squad',
-                  batch_size: int = 4, cache_path: str = None, checkpoint_filepath: str = None,
-                  debug: bool = False, prefix=''):
+                  which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
+                  checkpoint_filepath: str = None, debug: bool = False, prefix=''):
     """
 
     Args:
@@ -180,7 +212,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
                 'model_checkpoint': <t5-small, t5-base>
                 'which_model': 'fft' -> full fine-tuning of all parameters.
                                'soft' -> soft prompt is tuned
-                               'librabry' -> library of soft prompts
+                               'library' -> library of soft prompts
                 'epochs': <Optional>
         optimizer_params:
         which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
@@ -215,15 +247,18 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     default = {'algo': 'adam', 'params': {'learning_rate': 0.001}}
     optimizer_params = default if optimizer_params is None else optimizer_params
 
+    # Get model official name
+    official_name = _get_model_official_name(which_model)
+
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
-    tag = _create_file_tag(model_checkpoint, which_model, which_data, epochs, optimizer_params)
+    tag = _create_file_tag(model_checkpoint, official_name, which_data, optimizer_params)
     if prefix:
         tag = prefix + '-' + tag
 
     # Is there a model that has already been created for this?
-    filen, start_epoch = load_checkpoint(tag, checkpoint_filepath, load_best=False)
-    if start_epoch >= epochs:
+    filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
+    if start_epoch > epochs-1:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
         # return True
 
@@ -237,11 +272,11 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
 
     # 4. Get the model
     # Load the appropriate model
-    model, official_name = get_model(which_model, model_checkpoint, debug, optimizer_params, logger, filen)
+    model = get_model(official_name, model_checkpoint, debug, optimizer_params, logger, filen)
 
     if prompt_specs is not None:
         # Load the soft prompt for this model
-        prompt_tag = _load_soft_prompt(model, which_model, checkpoint_filepath, prompt_model_checkpoint,
+        prompt_tag = _load_soft_prompt(model, official_name, checkpoint_filepath, prompt_model_checkpoint,
                                        prompt_which_data)
         tag += '-softprompt-' + prompt_tag
 
@@ -249,8 +284,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     model.summary()
 
     # 5. Train the model
-    filepath = os.path.join(checkpoint_filepath, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
-    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=filepath, save_weights_only=True)
+    model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag)
     history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_checkpoint_callback, ],
                         validation_data=tfsplits['val'], initial_epoch=start_epoch)
 
@@ -258,19 +292,18 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
         # Save history and metrics
         model_history_to_dlog(logger, history.history, official_name)
 
-    # Save the soft prompts if this is a soft prompt model
-    _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,  which_data)
-
     # Delete the model
     del model
     tf.keras.backend.clear_session()
 
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
-    filen, start_epoch = load_checkpoint(tag, checkpoint_filepath, load_best=True)
-    model, official_name = get_model(which_model, model_checkpoint, debug, optimizer_params, logger, filen)
-    #
+    filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=True)
+    model = get_model(official_name, model_checkpoint, debug, optimizer_params, logger, filen)
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
+
+    # Save the soft prompts if this is a soft prompt model
+    _save_soft_prompt(model, official_name, checkpoint_filepath, model_checkpoint,  which_data)
 
     return results
 
@@ -381,10 +414,10 @@ if __name__ == '__main__':
     model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 30}
     run_model(model_config=model_configo, debug=False, prefix=prefixo)
 
-    # Run this model and collect results in log file
-    model_configo = {'model_checkpoint': 't5-base', 'which_model': 'fft', 'epochs': 30}
-    run_model(model_config=model_configo, debug=False, prefix=prefixo)
-
-    # Run this model and collect results in log file
-    model_configo = {'model_checkpoint': 't5-large', 'which_model': 'fft', 'epochs': 30}
-    run_model(model_config=model_configo, debug=False, prefix=prefixo)
+    # # Run this model and collect results in log file
+    # model_configo = {'model_checkpoint': 't5-base', 'which_model': 'fft', 'epochs': 30}
+    # run_model(model_config=model_configo, debug=False, prefix=prefixo)
+    #
+    # # Run this model and collect results in log file
+    # model_configo = {'model_checkpoint': 't5-large', 'which_model': 'fft', 'epochs': 30}
+    # run_model(model_config=model_configo, debug=False, prefix=prefixo)

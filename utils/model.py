@@ -1,4 +1,3 @@
-import os
 import abc
 import copy
 import warnings
@@ -21,6 +20,110 @@ The input argument `head_mask` was split into two arguments `head_mask` and `dec
 If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = tf.ones((num_layers,
 num_heads))`.
 """
+
+
+class PromptCallback(tf.keras.callbacks.Callback):
+
+    def __init__(
+            self,
+            filepath,
+            monitor: str = "accuracy",
+            save_best_only: bool = False,
+            best_is_lower: bool = False,
+            save_freq="epoch",
+    ):
+        super().__init__()
+        self._supports_tf_logs = True
+        self.monitor = monitor
+        self.filepath = filepath
+        self.save_best_only = save_best_only
+        self.save_freq = save_freq
+        self.cur_best = None
+        self.best_is_lower = best_is_lower
+        self._current_epoch = None
+
+    def on_train_begin(self, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_train_end(self, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self._current_epoch = epoch
+
+    def on_epoch_end(self, epoch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_test_begin(self, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_test_end(self, logs=None):
+        # When it is the first time then use the current value
+        self.cur_best = logs[self.monitor] if self.cur_best is None else self.cur_best
+
+        if self.save_best_only:
+            # Here is a case where lower value is better. ex; loss
+            if self.best_is_lower and logs[self.monitor] < self.cur_best:
+                # Save the current epoch value for restart
+                filen = self.filepath
+                self.model.save_prompt(filen)
+            # This is the case where a higher metric  value is better, ex: accuracy
+            elif not self.best_is_lower and logs[self.monitor] > self.cur_best:
+                # Save the current epoch value for restart
+                filen = self.filepath
+                self.model.save_prompt(filen)
+        else:
+            # Save the current epoch value for restart
+            filen = self.filepath + f'-e{self._current_epoch}-v{logs[self.monitor]:.03f}'
+            self.model.save_prompt(filen)
+
+    def on_predict_begin(self, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_predict_end(self, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_train_batch_begin(self, batch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_train_batch_end(self, batch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_test_batch_begin(self, batch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_test_batch_end(self, batch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_predict_batch_begin(self, batch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_predict_batch_end(self, batch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
 
 
 class PromptDenseLayer(tf.keras.layers.Layer):
@@ -61,7 +164,7 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
         # This scales the prompt to the input batch size
         # 1. create an ones array of batch size (batch_size, )
-        ones_array = tf.ones((tf.shape(input_embeds)[0], ), dtype=self.dtype)
+        ones_array = tf.ones((tf.shape(input_embeds)[0],), dtype=self.dtype)
 
         # 2. tensordot with soft prompt
         # Gives the shape (batch_size, num_tokens, model_d)
@@ -122,20 +225,20 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
 
     @unpack_inputs
     def call(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        inputs_embeds=None,
-        head_mask=None,
-        encoder_head_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            inputs_embeds=None,
+            head_mask=None,
+            encoder_head_mask=None,
+            past_key_values=None,
+            use_cache=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
+            training=False,
     ) -> Tuple:
 
         if input_ids is not None and inputs_embeds is not None:
@@ -676,7 +779,7 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         wandb = self.encoder.prompt.get_weights()
 
         # Save the weights
-        filen = filepath + '-weights'
+        filen = filepath
         np.save(filen, wandb[0])
 
         return True
@@ -695,7 +798,7 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         wandb = []
 
         # Save the weights
-        filen = filepath + '-weights.npy'
+        filen = filepath
         wandb.append(np.load(filen))
 
         # Load the weights into arrays
@@ -798,7 +901,7 @@ def model_history_to_dlog(logger, history, model_name):
 
     logger.info(f'iteration,loss,validation loss,accuracy,validation accuracy')
     for iteration, (loss, val_loss, accuracy, val_accuracy) in \
-            enumerate(zip(history['loss'], history['val_loss'],  history['accuracy'], history['val_accuracy'])):
+            enumerate(zip(history['loss'], history['val_loss'], history['accuracy'], history['val_accuracy'])):
         logger.info(f'{iteration + 1},{loss},{val_loss},{accuracy},{val_accuracy}')
 
 
@@ -845,15 +948,12 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, che
     else:
         raise KeyError(f'Unsupported optimizer algo type {optimizer_params["algo"]}')
 
-    if which_model.lower() in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+    if which_model == "PETLSoftPrompt":
         logger.info(f'Loading PETLSoftPrompt model')
-
-        model_name = 'PETLSoftPrompt'
-
         # Create a model instance
         model = PETLSoftPrompt.from_pretrained(checkpoint)
         if checkpoint_file:
-            model.load_weights(checkpoint_file, by_name=True, skip_mismatch=True)
+            model.load_prompt(checkpoint_file)
 
         # This makes the embedding layer non-trainable
         # The layer is called shared because it is shared between the encoder and decoder
@@ -868,9 +968,8 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, che
         model.layers[2].trainable = False
         _model_structure_to_dlog(logger, model)
 
-    elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
+    elif which_model == "FullFineTune":
         logger.info(f'Loading FullFineTune model')
-        model_name = 'FullFineTune'
 
         # Create a model instance
         model = FullFineTune.from_pretrained(checkpoint)
@@ -886,4 +985,4 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, che
     model.compile(optimizer=optimizer,
                   metrics=SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1),
                   run_eagerly=debug)
-    return model, model_name
+    return model
