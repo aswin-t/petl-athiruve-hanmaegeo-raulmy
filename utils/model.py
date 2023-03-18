@@ -923,13 +923,13 @@ def _model_structure_to_dlog(logger, model):
         logger.info(strng)
 
 
-def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, checkpoint_file: str = ''):
+def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint_file: str = ''):
     """
 
     Args:
         which_model: Which model to use, fft or soft or ...
         checkpoint: Which model checkpoint to use
-        optimizer_params: Optimizer parameters
+        optimizer: Optimizer object or None
 
         debug: If debug is True then model is run in eager model otherwise in graph mode
         logger: Logger for logging progress
@@ -937,16 +937,9 @@ def get_model(which_model, checkpoint, debug, optimizer_params, logger=None, che
     Returns:
     """
 
-    # Parameters other than the 'algo' are meant to go into the
-    params = optimizer_params['params']
-    if optimizer_params['algo'] == 'adam':
+    if optimizer is None:
+        params = {"learning_rate": 0.001}
         optimizer = tf.keras.optimizers.Adam(**params)
-    elif optimizer_params['algo'] == 'adafactor':
-        optimizer = Adafactor(**params)
-    elif optimizer_params['algo'] == 'sgd':
-        optimizer = tf.keras.optimizers.SGD(**params)
-    else:
-        raise KeyError(f'Unsupported optimizer algo type {optimizer_params["algo"]}')
 
     if which_model == "PETLSoftPrompt":
         logger.info(f'Loading PETLSoftPrompt model')

@@ -71,7 +71,16 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
     logger.info('reference,prediction')
     for r, p in zip(references, predictions):
         logger.info(f'{r},{p}')
-    results = metric.compute(predictions=predictions, references=references)
+
+    try:
+        # Most metric follow this format
+        results = metric.compute(predictions=predictions, references=references)
+    except ValueError:
+        # multirc follows a different format
+        idx = [x['idx'] for x in val_split]
+        # It needs  an index which is a dictionary and the value prediction
+        dict_predictions = [{'idx': eval(x), 'prediction': y} for x, y in zip(idx, predictions)]
+        results = metric.compute(predictions=dict_predictions, references=references)
 
     # Unique values
     classes = list(set(references))

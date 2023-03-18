@@ -76,7 +76,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
     return filen, cur_epoch
 
 
-def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_params):
+def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_tag):
     """
 
     Returns: A tag for this unique model configuration
@@ -84,10 +84,8 @@ def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_params
     """
     tag = model_checkpoint + '-' + which_model + '-'
     tag += "".join(f'{x}-' for x in which_data)
-    tag += f'{optimizer_params["algo"]}-'
-    tag += "".join(f'{k}-{v}-' for k, v in optimizer_params['params'].items())
-
-    return tag[:-1]
+    tag += optimizer_tag
+    return tag
 
 
 def _create_prompt_tag(model_checkpoint, which_data):
@@ -101,7 +99,7 @@ def _create_prompt_tag(model_checkpoint, which_data):
     return tag[:-1]
 
 
-def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,  which_data):
+def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint, which_data):
     """
     Save the prompt
 
@@ -132,7 +130,7 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         return ""
 
 
-def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,  which_data):
+def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint, which_data):
     """
     Save the prompt
 
@@ -191,7 +189,6 @@ def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
 
 
 def _get_model_official_name(which_model):
-
     if which_model.lower() in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
         model_name = 'PETLSoftPrompt'
     elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
@@ -201,38 +198,12 @@ def _get_model_official_name(which_model):
     return model_name
 
 
-def run_one_split(logger, model_config: dict = None, optimizer_params: dict = None,
-                  which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
-                  checkpoint_filepath: str = None, debug: bool = False, prefix=''):
-    """
-
-    Args:
-        logger: Object of python logging class
-        model_config: Dictionary:
-                'model_checkpoint': <t5-small, t5-base>
-                'which_model': 'fft' -> full fine-tuning of all parameters.
-                               'soft' -> soft prompt is tuned
-                               'library' -> library of soft prompts
-                'epochs': <Optional>
-        optimizer_params:
-        which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
-        batch_size: Number of rows to use per batch
-        cache_path: Path to store the cache files
-        checkpoint_filepath: Path to store the model checkpoints and log file
-        debug: if True then eager model of evaluation is run, else graph mode
-        prefix: Prefix to add to the model names
-
-    Returns:
-
-    """
-    model_config = model_config.copy()
-
-    # 1. Get and process inputs
-    # Get all the inputs for the model
+def _get_config(model_config):
     model_checkpoint = check_config(model_config, 'model_checkpoint', default=None, required=True)
     which_model = check_config(model_config, 'which_model', default=None, required=True)
     epochs = check_config(model_config, 'epochs', default=10, required=False)
     prompt_specs = check_config(model_config, 'prompt_transfer', default=None, required=False)
+
     if prompt_specs is not None:
         prompt_model_checkpoint = prompt_specs['model_checkpoint']
         prompt_which_data = prompt_specs['which_data']
@@ -243,24 +214,63 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     if model_config:
         raise KeyError(f'Unexpected keys {list(model_config.keys())} in model_config')
 
-    # Get the optimizer
-    default = {'algo': 'adam', 'params': {'learning_rate': 0.001}}
-    optimizer_params = default if optimizer_params is None else optimizer_params
+    return model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data
+
+
+def run_one_split(logger, model_config: dict = None, optimizer_params=None,
+                  which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
+                  checkpoint_filepath: str = None, debug: bool = False, prefix='', force_rerun: bool = False):
+    """
+
+    Args:
+        logger: Object of python logging class
+        model_config: Dictionary:
+                'model_checkpoint': <t5-small, t5-base>
+                'which_model': 'fft' -> full fine-tuning of all parameters.
+                               'soft' -> soft prompt is tuned
+                               'library' -> library of soft prompts
+                'epochs': <Optional>
+        optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
+        which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
+        batch_size: Number of rows to use per batch
+        cache_path: Path to store the cache files
+        checkpoint_filepath: Path to store the model checkpoints and log file
+        debug: if True then eager model of evaluation is run, else graph mode
+        prefix: Prefix to add to the model names
+        force_rerun: Force a rerun even if a file exists
+
+    Returns:
+
+    """
+    model_config = model_config.copy()
+
+    # 1. Get and process inputs
+    # Get inputs from model config
+    model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data = _get_config(model_config)
+
+    # Get the optimizer specifications
+    optimizer_params = {} if optimizer_params is None else optimizer_params
+    optimizer = check_config(optimizer_params, 'optimizer', default=None, required=False)
+    optimizer_tag = check_config(optimizer_params, 'tag', default='adam-learning_rate-0.001', required=False)
 
     # Get model official name
     official_name = _get_model_official_name(which_model)
 
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
-    tag = _create_file_tag(model_checkpoint, official_name, which_data, optimizer_params)
+    tag = _create_file_tag(model_checkpoint, official_name, which_data, optimizer_tag)
     if prefix:
         tag = prefix + '-' + tag
 
     # Is there a model that has already been created for this?
     filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
-    if start_epoch > epochs-1:
+    if start_epoch > epochs - 1:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
-        # return True
+        if not force_rerun:
+            return True
+        else:
+            filen = ''
+            start_epoch = 0
 
     # Running this evaluation
     logger.info(f'This evaluation tag is {tag}')
@@ -272,9 +282,9 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
 
     # 4. Get the model
     # Load the appropriate model
-    model = get_model(official_name, model_checkpoint, debug, optimizer_params, logger, filen)
+    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
 
-    if prompt_specs is not None:
+    if prompt_model_checkpoint:
         # Load the soft prompt for this model
         prompt_tag = _load_soft_prompt(model, official_name, checkpoint_filepath, prompt_model_checkpoint,
                                        prompt_which_data)
@@ -291,6 +301,9 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     if history.history:
         # Save history and metrics
         model_history_to_dlog(logger, history.history, official_name)
+        history = history.history
+    else:
+        history = None
 
     # Delete the model
     del model
@@ -302,13 +315,17 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     model = get_model(official_name, model_checkpoint, debug, optimizer_params, logger, filen)
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
 
+    # Append history before returning
+    results['history'] = history
+
     # Save the soft prompts if this is a soft prompt model
-    _save_soft_prompt(model, official_name, checkpoint_filepath, model_checkpoint,  which_data)
+    _save_soft_prompt(model, official_name, checkpoint_filepath, model_checkpoint, which_data)
+
 
     return results
 
 
-def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batch_size: int = 4, cache_path: str = None,
+def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: int = 4, cache_path: str = None,
                   checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue', one_task: str = None,
                   prefix=''):
     """
@@ -318,9 +335,9 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
                 'model_checkpoint': <t5-small, t5-base>
                 'which_model': 'fft' -> full fine-tuning of all parameters.
                                'soft' -> soft prompt is tuned
-                               'librabry' -> library of soft prompts
+                               'library' -> library of soft prompts
                 'epochs': <Optional>
-        optimizer_params:
+        optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
         checkpoint_filepath: Path to store the model checkpoints and log file
@@ -376,7 +393,7 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
             logger.warning('Exception was raised')
 
 
-def run_model(model_config: dict = None, optimizer_params: dict = None, debug: bool = False, prefix=''):
+def run_model(model_config: dict = None, optimizer_params=None, debug: bool = False, prefix=''):
     """
 
     Args:
@@ -386,7 +403,7 @@ def run_model(model_config: dict = None, optimizer_params: dict = None, debug: b
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
                 'epochs': <Optional>
-        optimizer_params:
+        optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
     Returns:
@@ -408,19 +425,3 @@ def run_model(model_config: dict = None, optimizer_params: dict = None, debug: b
     run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
                   cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark='glue',
                   one_task=None, prefix=prefix)
-
-
-if __name__ == '__main__':
-    prefixo = 'aswin'
-    # Run this model and collect results in log file
-    optimizer_paramso = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
-    model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 30}
-    run_model(model_config=model_configo, optimizer_params=optimizer_paramso, debug=False, prefix=prefixo)
-
-    # # Run this model and collect results in log file
-    # model_configo = {'model_checkpoint': 't5-base', 'which_model': 'fft', 'epochs': 30}
-    # run_model(model_config=model_configo, debug=False, prefix=prefixo)
-    #
-    # # Run this model and collect results in log file
-    # model_configo = {'model_checkpoint': 't5-large', 'which_model': 'fft', 'epochs': 30}
-    # run_model(model_config=model_configo, debug=False, prefix=prefixo)
