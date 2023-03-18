@@ -92,9 +92,85 @@ def _create_file_tag(model_checkpoint, which_model, which_data, epochs, optimize
     return tag[:-1]
 
 
+def _create_prompt_tag(model_checkpoint, which_data):
+    """
+
+    Returns: A tag for this unique model configuration
+
+    """
+    tag = model_checkpoint + '-'
+    tag += "".join(f'{x}-' for x in which_data)
+    return tag[:-1]
+
+
+def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,  which_data):
+    """
+    Save the prompt
+
+    Args:
+        model: Fitted model
+        model_checkpoint: Checkpoint from which the model was loaded
+        checkpoint_filepath: Filepath to store the prompts
+        which_model: Prompts are only saved for the soft model
+        which_data: Which data was fit for the model
+
+    Returns:
+
+    """
+
+    # This is a model we want to save the prompts for
+    if which_model in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+        filepath = os.path.join(checkpoint_filepath, 'soft_prompt')
+
+        #  Make the folder if it does not exist
+        os.makedirs(filepath, exist_ok=True)
+
+        # Only the model checkpoint
+        prompt_tag = _create_prompt_tag(model_checkpoint, which_data)
+        model.save_prompt(os.path.join(filepath, 'soft-prompt-' + prompt_tag))
+
+        return prompt_tag
+    else:
+        return ""
+
+
+def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,  which_data):
+    """
+    Save the prompt
+
+    Args:
+        model: Fitted model
+        model_checkpoint: Checkpoint from which the model was loaded
+        checkpoint_filepath: Filepath to store the prompts
+        which_model: Prompts are only saved for the soft model
+        which_data: Which data was fit for the model
+    Returns:
+
+    """
+
+    # This is a model we want to save the prompts for
+    if which_model in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
+        # Soft prompt is not requested
+        if not (model_checkpoint and which_data):
+            return ""
+
+        filepath = os.path.join(checkpoint_filepath, 'soft_prompt')
+
+        #  Make the folder if it does not exist
+        os.makedirs(filepath, exist_ok=True)
+
+        # Only the model checkpoint
+        prompt_tag = _create_prompt_tag(model_checkpoint, which_data)
+        model.load_prompt(os.path.join(checkpoint_filepath, 'soft-prompt-' + prompt_tag))
+
+        return prompt_tag
+    else:
+        return ""
+
+
 def run_one_split(logger, model_config: dict = None, optimizer_params: dict = None,
                   which_data: Union[str, tuple] = 'squad',
-                  batch_size: int = 4, cache_path: str = None, output_path: str = None,
+                  batch_size: int = 4, cache_path: str = None, checkpoint_filepath: str = None,
                   debug: bool = False, prefix=''):
     """
 
@@ -110,7 +186,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
         which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
-        output_path: Path to store the model checkpoints and log file
+        checkpoint_filepath: Path to store the model checkpoints and log file
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
 
@@ -124,9 +200,18 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     model_checkpoint = check_config(model_config, 'model_checkpoint', default=None, required=True)
     which_model = check_config(model_config, 'which_model', default=None, required=True)
     epochs = check_config(model_config, 'epochs', default=10, required=False)
+    prompt_specs = check_config(model_config, 'prompt_transfer', default=None, required=False)
+    if prompt_specs is not None:
+        prompt_model_checkpoint = prompt_specs['model_checkpoint']
+        prompt_which_data = prompt_specs['which_data']
+    else:
+        prompt_model_checkpoint = ''
+        prompt_which_data = ''
+
     if model_config:
         raise KeyError(f'Unexpected keys {list(model_config.keys())} in model_config')
 
+    # Get the optimizer
     default = {'algo': 'adam', 'params': {'learning_rate': 0.001}}
     optimizer_params = default if optimizer_params is None else optimizer_params
 
@@ -135,35 +220,46 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
     tag = _create_file_tag(model_checkpoint, which_model, which_data, epochs, optimizer_params)
     if prefix:
         tag = prefix + '-' + tag
-    filen, start_epoch = load_checkpoint(tag, output_path, load_best=False)
 
+    # Is there a model that has already been created for this?
+    filen, start_epoch = load_checkpoint(tag, checkpoint_filepath, load_best=False)
     if start_epoch >= epochs:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
         # return True
 
+    # Running this evaluation
     logger.info(f'This evaluation tag is {tag}')
 
     # 3. Prepare the data
-    # Prepare the Dataset
+    # Load teh data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path)
 
     # 4. Get the model
-    # Get the model from the
+    # Load the appropriate model
     model, official_name = get_model(which_model, model_checkpoint, debug, optimizer_params, logger, filen)
+
+    if prompt_specs is not None:
+        # Load the soft prompt for this model
+        prompt_tag = _load_soft_prompt(model, which_model, checkpoint_filepath, prompt_model_checkpoint,
+                                       prompt_which_data)
+        tag += '-softprompt-' + prompt_tag
+
+    # Display model summary
     model.summary()
 
     # 5. Train the model
-    checkpoint_filepath = os.path.join(output_path, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
+    filepath = os.path.join(checkpoint_filepath, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
+    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=filepath, save_weights_only=True)
+    history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_checkpoint_callback, ],
+                        validation_data=tfsplits['val'], initial_epoch=start_epoch)
 
-    if start_epoch < epochs:
-        model_checkpoint_callback = \
-            tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_filepath, save_weights_only=True)
-        history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_checkpoint_callback, ],
-                            validation_data=tfsplits['val'], initial_epoch=start_epoch)
-
+    if history.history:
         # Save history and metrics
         model_history_to_dlog(logger, history.history, official_name)
+
+    # Save the soft prompts if this is a soft prompt model
+    _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,  which_data)
 
     # Delete the model
     del model
@@ -171,9 +267,8 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
 
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
-    filen, start_epoch = load_checkpoint(tag, output_path, load_best=True)
+    filen, start_epoch = load_checkpoint(tag, checkpoint_filepath, load_best=True)
     model, official_name = get_model(which_model, model_checkpoint, debug, optimizer_params, logger, filen)
-
     #
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
 
@@ -181,8 +276,8 @@ def run_one_split(logger, model_config: dict = None, optimizer_params: dict = No
 
 
 def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batch_size: int = 4, cache_path: str = None,
-                  output_path: str = None, debug: bool = False, benchmark='superglue',
-                  one_task: str = None, prefix=''):
+                  checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue', one_task: str = None,
+                  prefix=''):
     """
 
     Args:
@@ -195,7 +290,7 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
         optimizer_params:
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
-        output_path: Path to store the model checkpoints and log file
+        checkpoint_filepath: Path to store the model checkpoints and log file
         benchmark: Which benchmark to run glue or superglue
         debug: if True then eager model of evaluation is run, else graph mode
         one_task: Which superglue task to run
@@ -226,7 +321,7 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
             raise KeyError(f'Task {one_task} is not in benchmark {benchmark}')
 
     # Create a log object
-    logger = create_logger(output_path, filename=f'{prefix}benchmark_{benchmark}.log')
+    logger = create_logger(checkpoint_filepath, filename=f'{prefix}benchmark_{benchmark}.log')
     logger.info(f'Performing {benchmark} tuning')
 
     # For each task run the model
@@ -240,8 +335,8 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
             # Run one experiment and log all results
             # If it fails then carry on
             run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
-                          batch_size=batch_size, cache_path=cache_path, output_path=output_path, debug=debug,
-                          prefix=prefix)
+                          batch_size=batch_size, cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
+                          debug=debug, prefix=prefix)
         except Exception as e:
             # Capture the exception and
             logger.exception(e)
@@ -265,18 +360,18 @@ def run_model(model_config: dict = None, debug: bool = False, prefix=''):
     """
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
-    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
     optimizer_params = {'algo': 'adam', 'params': {'learning_rate': 0.0001}}
     batch_size = 100
 
     #  Run the superglue benchmnark
     run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
-                  cache_path=cache_path, output_path=output_path, debug=debug, benchmark='superglue',
+                  cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark='superglue',
                   one_task=None, prefix=prefix)
 
     #  Run the superglue benchmnark
     run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
-                  cache_path=cache_path, output_path=output_path, debug=debug, benchmark='glue',
+                  cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark='glue',
                   one_task=None, prefix=prefix)
 
 

@@ -1,3 +1,4 @@
+import os
 import abc
 import copy
 import warnings
@@ -12,6 +13,7 @@ from transformers.modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutpu
     TFBaseModelOutputWithPastAndCrossAttentions
 from utils.metric import SelectiveSparseTopKCategoricalAccuracy
 from keras.optimizers.optimizer_experimental.adafactor import Adafactor
+from utils import constants
 
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
@@ -25,9 +27,8 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.num_tokens = 20
+        self.num_tokens = constants.NUM_SOFT_TOKENS
         self.soft_prompt = None
-        # self.ones_array = None
 
     def build(self, input_shape):
         """
@@ -660,6 +661,47 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, logits)
         return {m.name: m.result() for m in self.metrics}
+
+    def save_prompt(self, filepath):
+        """
+        Save the prompts as numpy files
+        Args:
+            filepath: Filename with path -weights.npy and -biases.npy will be added to filename
+
+        Returns:
+
+        """
+
+        # Get the weights and biases of this layer
+        wandb = self.encoder.prompt.get_weights()
+
+        # Save the weights
+        filen = filepath + '-weights'
+        np.save(filen, wandb[0])
+
+        return True
+
+    def load_prompt(self, filepath):
+        """
+        Save the prompts as numpy files
+        Args:
+            filepath: Filename with path -weights.npy and -biases.npy will be added to filename
+
+        Returns:
+
+        """
+
+        # Get the weights and biases of this layer
+        wandb = []
+
+        # Save the weights
+        filen = filepath + '-weights.npy'
+        wandb.append(np.load(filen))
+
+        # Load the weights into arrays
+        self.encoder.prompt.set_weights(wandb)
+
+        return True
 
 
 class FullFineTune(TFT5ForConditionalGeneration):

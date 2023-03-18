@@ -91,8 +91,9 @@ class LabelEncodeDecode:
                 if v == inpred:
                     return k
 
-            # Did not find teh predicted values in the value field
+            # Did not find the predicted values in the value field
             keys = list(self.lookup.keys())
+            keys = [x for x in keys if x != -1]
             random.shuffle(keys)
             return keys[0]
         else:

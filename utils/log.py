@@ -20,7 +20,7 @@ def create_logger(output_folder, filename='model_logs.log', file_level=logging.I
     logger = logging.getLogger('common')
 
     #
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
     logger.setLevel(file_level)
 

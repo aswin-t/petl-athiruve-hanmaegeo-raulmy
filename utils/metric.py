@@ -1,8 +1,10 @@
 import evaluate
+import numpy as np
 import tensorflow as tf
 from functools import partial
 from transformers import AutoTokenizer
 from utils.constants import ENCODER_MAX_LEN
+from sklearn.metrics import confusion_matrix
 from utils.data import LabelEncodeDecode, PrepDataset
 
 
@@ -69,9 +71,25 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
     logger.info('reference,prediction')
     for r, p in zip(references, predictions):
         logger.info(f'{r},{p}')
-
     results = metric.compute(predictions=predictions, references=references)
 
-    res_str = "".join(f'{k},{v}' for k, v in results.items())
-    logger.info(f'Results:{tag},{res_str}')
+    # Unique values
+    classes = list(set(references))
+    labels = [led(x) for x in classes]
+
+    # Print out the confusion matrix
+    logger.info('Confusion matrix')
+    try:
+        matrix = confusion_matrix(references, predictions)
+        strng = "".join(f'{x:>15}' for x in [' ', ] + labels)
+        logger.info(strng)
+        for label, row in zip(labels, matrix):
+            row_str = "".join(f'{x:15d}' for x in row)
+            logger.info(f'{label:>15}{row_str}')
+    except ValueError:
+        logger.info('Bad predictions. Confusion matrix cannot be printed')
+
+    # Then the final results
+    res_str = "".join(f'{k},{v},' for k, v in results.items())
+    logger.info(f'Results:{tag},{res_str[:-1]}')
     return results

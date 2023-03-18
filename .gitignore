@@ -2,7 +2,7 @@ cache/*
 utils/__pycache__/*
 .idea/*
 .ipynb_checkpoints/*
-checkpoints/*.log
-checkpoints/*.hdf5
+checkpoints/*.*
+checkpoints/soft_prompt
 transformers/*
 notebooks/.ipynb_checkpoints/*
