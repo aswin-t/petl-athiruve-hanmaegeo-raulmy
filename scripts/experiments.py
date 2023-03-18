@@ -47,7 +47,7 @@ def run_few(model_checkpoint, which_model, optimizer_params, output_path):
     debug = False
     tasks = [('super_glue', 'multirc'), ('super_glue', 'rte'), ('glue', 'cola'), ('glue', 'qnli')]
     prefix = 'optimizer'
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 1}
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 30}
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
 
