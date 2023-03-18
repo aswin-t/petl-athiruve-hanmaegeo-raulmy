@@ -413,8 +413,9 @@ def run_model(model_config: dict = None, optimizer_params: dict = None, debug: b
 if __name__ == '__main__':
     prefixo = 'aswin'
     # Run this model and collect results in log file
+    optimizer_paramso = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
     model_configo = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 30}
-    run_model(model_config=model_configo, debug=False, prefix=prefixo)
+    run_model(model_config=model_configo, optimizer_params=optimizer_paramso, debug=False, prefix=prefixo)
 
     # # Run this model and collect results in log file
     # model_configo = {'model_checkpoint': 't5-base', 'which_model': 'fft', 'epochs': 30}
