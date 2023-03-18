@@ -376,7 +376,7 @@ def run_benchmark(model_config: dict = None, optimizer_params: dict = None, batc
             logger.warning('Exception was raised')
 
 
-def run_model(model_config: dict = None, debug: bool = False, prefix=''):
+def run_model(model_config: dict = None, optimizer_params: dict = None, debug: bool = False, prefix=''):
     """
 
     Args:
@@ -386,6 +386,7 @@ def run_model(model_config: dict = None, debug: bool = False, prefix=''):
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
                 'epochs': <Optional>
+        optimizer_params:
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
     Returns:
@@ -394,7 +395,8 @@ def run_model(model_config: dict = None, debug: bool = False, prefix=''):
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
     checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
-    optimizer_params = {'algo': 'adam', 'params': {'learning_rate': 0.0001}}
+    optimizer_default_params = {'algo': 'adam', 'params': {'learning_rate': 0.0001}}
+    optimizer_params = optimizer_default_params if optimizer_params is None else optimizer_params
     batch_size = 100
 
     #  Run the superglue benchmnark
