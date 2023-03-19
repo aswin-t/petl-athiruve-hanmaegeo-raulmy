@@ -561,7 +561,12 @@ class PrepDataset:
 
             # Now we have the text encoded to tokens
             train_dataset = load_dataset(*which, split='train', cache_dir=cache_path)
-            valid_dataset = load_dataset(*which, split='validation', cache_dir=cache_path)
+            try:
+                valid_dataset = load_dataset(*which, split='validation', cache_dir=cache_path)
+            # For  Glue, MNLI the validaiton set is called validation_matched or validation_mismatched
+            # We load the validation mismatched here
+            except ValueError:
+                valid_dataset = load_dataset(*which, split='validation_mismatched', cache_dir=cache_path)
 
             tts = valid_dataset.train_test_split(test_size=0.3)
             valid_dataset = tts['train']

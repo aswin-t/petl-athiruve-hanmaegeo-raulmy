@@ -435,9 +435,11 @@ def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: 
     prefix = prefix + '-' if prefix else prefix
 
     # These are the superglue tasks that we want to perform
-    if benchmark == 'glue':
+    if isinstance(benchmark, list) or isinstance(benchmark, tuple):
+        tasks = tuple(benchmark)
+    elif benchmark == 'glue':
         tasks = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
-                 ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'wnli'), ('glue', 'stsb'))
+                 ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'wnli'), ('glue', 'stsb'), ('glue', 'mnli'))
     elif benchmark == 'superglue':
         tasks = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
                  ('super_glue', 'multirc'), ('super_glue', 'cb'), ('super_glue', 'copa'))
@@ -453,7 +455,7 @@ def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: 
             raise KeyError(f'Task {one_task} is not in benchmark {benchmark}')
 
     # Create a log object
-    logger = create_logger(checkpoint_filepath, filename=f'{prefix}benchmark_{benchmark}.log')
+    logger = create_logger(checkpoint_filepath, filename=f'{prefix}benchmark.log')
     logger.info(f'Performing {benchmark} tuning')
 
     # For each task run the model

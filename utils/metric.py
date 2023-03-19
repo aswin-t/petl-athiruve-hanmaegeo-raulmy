@@ -1,11 +1,10 @@
 import evaluate
-import numpy as np
 import tensorflow as tf
 from functools import partial
 from transformers import AutoTokenizer
 from utils.constants import ENCODER_MAX_LEN
-from sklearn.metrics import confusion_matrix
 from utils.data import LabelEncodeDecode, PrepDataset
+from sklearn.metrics import confusion_matrix, f1_score, balanced_accuracy_score
 
 
 class SelectiveSparseTopKCategoricalAccuracy(tf.keras.metrics.SparseTopKCategoricalAccuracy):
@@ -98,7 +97,14 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
     except ValueError:
         logger.info('Bad predictions. Confusion matrix cannot be printed')
 
+    # simple sklearn results
+    bas = balanced_accuracy_score(references, predictions)
+    abas = balanced_accuracy_score(references, predictions, adjusted=True)
+    f1s = f1_score(references, predictions, average='weighted')
+    logger.info(f'Results:{tag},bas,{bas},abas,{abas},f1s,{f1s}')
+
     # Then the final results
     res_str = "".join(f'{k},{v},' for k, v in results.items())
-    logger.info(f'Results:{tag},{res_str[:-1]}')
+    logger.info(f'Results_benchmark:{tag},{res_str[:-1]}')
+    results.update({'bas': bas, 'abas': abas, 'f1s': f1s})
     return results

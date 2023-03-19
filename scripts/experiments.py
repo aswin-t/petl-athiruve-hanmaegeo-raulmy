@@ -9,9 +9,9 @@ from utils.train import run_one_split, run_lr_split
 
 
 def run_one():
-    batch_size = 10
+    batch_size = 100
     debug = False
-    task = ('super_glue', 'boolq')
+    task = ('glue', 'mnli')
     prefix = 'experiment'
     # model_config = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 0,
     #                 'prompt_transfer': {'model_checkpoint': 't5-small',
@@ -140,5 +140,6 @@ def analyze_results(results):
 
 
 if __name__ == '__main__':
-    ress = optimizer_checks('t5-small', 'fft')
-    analyze_results(ress)
+    run_one()
+    # ress = optimizer_checks('t5-small', 'fft')
+    # analyze_results(ress)
