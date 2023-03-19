@@ -38,8 +38,9 @@ class LinearRampScheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
         self.total_steps_ = total_steps
 
         self.learning_rates = tf.convert_to_tensor((
-                10**np.linspace(np.log10(initial_learning_rate),
-                                np.log10(final_learning_rate), total_steps)).tolist(), dtype='float32')
+                                                           10 ** np.linspace(np.log10(initial_learning_rate),
+                                                                             np.log10(final_learning_rate),
+                                                                             total_steps)).tolist(), dtype='float32')
         self.total_steps = tf.constant(int(total_steps), dtype='int32')
         self.final_learning_rate = tf.constant(final_learning_rate, dtype='float32')
         self.learning_rate = None
@@ -70,7 +71,7 @@ class LinearRampScheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 class BatchLossCallback(tf.keras.callbacks.Callback):
 
-    def __init__(self, logger, monitor: str = ("loss", "accuracy"),):
+    def __init__(self, logger, monitor: str = ("loss", "accuracy"), ):
         super().__init__()
         self.logger = logger
         self.monitor = monitor
