@@ -1,10 +1,11 @@
 import os
 import pickle
 import numpy as np
-from utils.log import create_logger
-from utils.train import run_one_split
-from keras.optimizers import SGD, Adam
+from derivative import dxdt
+import matplotlib.pyplot as plt
 from keras.optimizers.optimizer_experimental.adamw import AdamW
+from utils.log import create_logger
+from utils.train import run_one_split, run_lr_split
 
 
 def run_one():
@@ -16,7 +17,9 @@ def run_one():
     #                 'prompt_transfer': {'model_checkpoint': 't5-small',
     #                 'which_data': ('super_glue', 'boolq')}}
     model_config = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 1}
-    optimizer_params = {'algo': 'adam', 'params': {'learning_rate': 0.01}}
+    learning_rate = 0.001
+    optimizer_params = {'tag': f'adamw-learning_rate-{learning_rate:.6f}',
+                        'optimizer': AdamW(learning_rate=learning_rate)}
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
     output_path = os.path.join(os.path.dirname(__file__), "../checkpoints")
@@ -31,23 +34,24 @@ def run_one():
                   prefix=prefix)
 
 
-def run_few(model_checkpoint, which_model, optimizer_params, output_path):
+def run_few(model_checkpoint, which_model, optimizer_algo, output_path):
     """
     Run a few tasks and return results
     Args:
         model_checkpoint: Model checkpoint to use
         which_model: 'fft' or 'soft'
-        optimizer_params: Parameters for the optimizer
+        optimizer_algo: Parameters for the optimizer
         output_path:
 
     Returns:
 
     """
-    batch_size = 10
+
+    batch_size = 100
     debug = False
     tasks = [('super_glue', 'multirc'), ('super_glue', 'rte'), ('glue', 'cola'), ('glue', 'qnli')]
     prefix = 'optimizer'
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 30}
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 1}
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
 
@@ -58,8 +62,8 @@ def run_few(model_checkpoint, which_model, optimizer_params, output_path):
     # If it fails then carry on
     results = []
     for task in tasks:
-        result = run_one_split(
-            logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
+        result = run_lr_split(
+            logger, model_config=model_config, optimizer_algo=optimizer_algo, which_data=task,
             batch_size=batch_size, cache_path=cache_path, checkpoint_filepath=output_path, debug=debug,
             prefix=prefix, force_rerun=True)
 
@@ -75,30 +79,66 @@ def optimizer_checks(model_checkpoint, which_model):
     """
     output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
     os.makedirs(output_path, exist_ok=True)
+    algo = AdamW
 
     # Learning rate on log scale
-    for algo in [AdamW, SGD, Adam]:
-        for learning_rate in 10**np.linspace(-5, -1, 10):
-            # Create a tag for the optimizer
-            optim_tag = str(algo).split('.')[-1].split("'>")[0]
-            optim_tag += f'-learning_rate-{learning_rate:.05f}'
+    optim_tag = str(algo).split('.')[-1].split("'>")[0]
+    # These are the results for this configuration
+    filename = os.path.join(output_path, optim_tag + '.p')
+    if not os.path.exists(filename):
+        results = run_few(model_checkpoint, which_model, algo, output_path)
+        with open(filename, 'wb') as outfi:
+            pickle.dump(results, outfi)
+    else:
+        with open(filename, 'rb') as infi:
+            results = pickle.load(infi)
+    return results
 
-            # Create an optimizer object
-            optimi_ = algo(learning_rate=learning_rate)
-            tag = model_checkpoint + '-' + which_model + '-' + optim_tag
 
-            # These are the results for this configuration
-            filename = os.path.join(output_path, tag + '.p')
-            if os.path.exists(filename):
-                continue
-            else:
-                optimizer_params = {'optimizer': optimi_, 'tag': optim_tag}
-                results = run_few(model_checkpoint, which_model, optimizer_params, output_path)
+def analyze_results(results):
+    plt.figure(figsize=(10, 4.8))
+    colors = ['b', 'g', 'r', 'c']
+    derivatives = []
+    min_der = []
+    x_s = []
+    loss_s = []
+    for cnt, res in enumerate(results):
+        x_ = np.array(res['learning_rate'])
+        loss = np.array(res['loss'])
+        idx = x_ > 1E-7
 
-                with open(filename, 'wb') as outfi:
-                    pickle.dump(results, outfi)
+        x_ = x_[idx]
+        loss = loss[idx]
+
+        x_s.append(x_)
+        loss_s.append(loss)
+
+        # Find the derivative of multiple points
+        der = dxdt(loss, np.log10(x_), kind='finite_difference', k=3)
+        derivatives.append(der)
+        min_der.append(np.min(der))
+
+    # Make the limit as 20% higher than the minimum derivatives
+    # limit = max(min_der) * 0.8
+    for cnt, (x_, loss, der) in enumerate(zip(x_s, loss_s, derivatives)):
+        plt.subplot(1, 2, 1)
+        plt.plot(np.log10(x_), loss, f'-{colors[cnt]}')
+        # plt.plot(np.log10(x_[der < limit]), loss[der < limit], f'o{colors[cnt]}')
+
+        plt.subplot(1, 2, 2)
+        plt.plot(np.log10(x_), der, colors[cnt])
+        plt.ylim([None, 0])
+
+    plt.subplot(1, 2, 1)
+    plt.xlabel("Log10 of learning rate")
+    plt.ylabel("Training loss")
+
+    plt.subplot(1, 2, 2)
+    plt.xlabel("Log10 of learning rate")
+    plt.ylabel("derivative of training loss")
+    plt.show()
 
 
 if __name__ == '__main__':
-    # run_one()
-    optimizer_checks('t5-small', 'fft')
+    ress = optimizer_checks('t5-small', 'fft')
+    analyze_results(ress)

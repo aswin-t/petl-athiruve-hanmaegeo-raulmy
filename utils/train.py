@@ -7,7 +7,7 @@ from typing import Union
 from utils.data import PrepDataset
 from utils.log import create_logger
 from utils.metric import evaluate_metric
-from utils.model import get_model, model_history_to_dlog, PromptCallback
+from utils.model import get_model, model_history_to_dlog, PromptCallback, LinearRampScheduler, BatchLossCallback
 
 os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
 
@@ -50,7 +50,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
     strg_chk = re.compile(r'-e(\d+)-v(\d*\.\d*)\.(hdf5|npy)')
 
     # Find all filenames that match the current tag
-    cur_epoch = 0
+    cur_epoch = -1
     cur_val = 0
 
     # Empty filename
@@ -217,6 +217,87 @@ def _get_config(model_config):
     return model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data
 
 
+def run_lr_split(logger, optimizer_algo, model_config: dict = None,
+                 which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
+                 checkpoint_filepath: str = None, debug: bool = False, prefix='', force_rerun: bool = False):
+    """
+
+    Args:
+        logger: Object of python logging class
+        optimizer_algo: Optimizer class such as SGD or ADAM
+        model_config: Dictionary:
+                'model_checkpoint': <t5-small, t5-base>
+                'which_model': 'fft' -> full fine-tuning of all parameters.
+                               'soft' -> soft prompt is tuned
+                               'library' -> library of soft prompts
+                'epochs': <Optional>
+        which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
+        batch_size: Number of rows to use per batch
+        cache_path: Path to store the cache files
+        checkpoint_filepath: Path to store the model checkpoints and log file
+        debug: if True then eager model of evaluation is run, else graph mode
+        prefix: Prefix to add to the model names
+        force_rerun: Force a rerun even if a file exists
+
+    Returns:
+
+    """
+    model_config = model_config.copy()
+
+    # 1. Get and process inputs
+    # Get inputs from model config
+    model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data = _get_config(model_config)
+
+    # Get model official name
+    official_name = _get_model_official_name(which_model)
+
+    # 2. Create a unique tag and load model checkpoint
+    # Create a tag for this unique model
+    tag = _create_file_tag(model_checkpoint, official_name, which_data, "")
+    if prefix:
+        tag = prefix + '-' + tag
+
+    # Is there a model that has already been created for this?
+    filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
+    if start_epoch >= epochs - 1:
+        print('Model was previously run with equal or more epochs and completed. No need to run again')
+        if not force_rerun:
+            return True
+        else:
+            filen = ''
+            start_epoch = 0
+
+    # Running this evaluation
+    logger.info(f'This evaluation tag is {tag}')
+
+    # 3. Prepare the data
+    # Load teh data to memory
+    dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
+    tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path)
+
+    # Increase the learning rate linearly within one training epoch
+    learning_scheduler = LinearRampScheduler(initial_learning_rate=1E-8, final_learning_rate=1,
+                                             total_steps=int(counts['train']/batch_size))
+    optimizer = optimizer_algo(learning_rate=learning_scheduler)
+
+    # 4. Get the model
+    # Load the appropriate model
+    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
+    model.summary()
+
+    # 5. Train the model
+    model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag)
+    model_optimizer_callback = BatchLossCallback(logger=logger)
+    model.fit(tfsplits['train'], epochs=epochs,  callbacks=[model_checkpoint_callback, model_optimizer_callback],
+              validation_data=tfsplits['val'], initial_epoch=start_epoch)
+
+    # Delete the model
+    del model
+    tf.keras.backend.clear_session()
+
+    return model_optimizer_callback.history
+
+
 def run_one_split(logger, model_config: dict = None, optimizer_params=None,
                   which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
                   checkpoint_filepath: str = None, debug: bool = False, prefix='', force_rerun: bool = False):
@@ -264,13 +345,15 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
 
     # Is there a model that has already been created for this?
     filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
-    if start_epoch > epochs - 1:
+    if start_epoch >= epochs - 1:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
         if not force_rerun:
-            return True
+            pass
+            # return True
         else:
             filen = ''
             start_epoch = 0
+    start_epoch += 1
 
     # Running this evaluation
     logger.info(f'This evaluation tag is {tag}')
@@ -312,7 +395,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
     filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=True)
-    model = get_model(official_name, model_checkpoint, debug, optimizer_params, logger, filen)
+    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
 
     # Append history before returning
@@ -320,7 +403,6 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
 
     # Save the soft prompts if this is a soft prompt model
     _save_soft_prompt(model, official_name, checkpoint_filepath, model_checkpoint, which_data)
-
 
     return results
 

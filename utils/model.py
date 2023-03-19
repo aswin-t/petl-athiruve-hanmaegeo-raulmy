@@ -11,7 +11,6 @@ from transformers.utils import ContextManagers
 from transformers.modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput, \
     TFBaseModelOutputWithPastAndCrossAttentions
 from utils.metric import SelectiveSparseTopKCategoricalAccuracy
-from keras.optimizers.optimizer_experimental.adafactor import Adafactor
 from utils import constants
 
 _HEAD_MASK_WARNING_MSG = """
@@ -20,6 +19,92 @@ The input argument `head_mask` was split into two arguments `head_mask` and `dec
 If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = tf.ones((num_layers,
 num_heads))`.
 """
+
+
+class LinearRampScheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
+
+    def __init__(self, initial_learning_rate, final_learning_rate, total_steps, name=None):
+        """
+
+        Args:
+            initial_learning_rate:
+            final_learning_rate:
+            total_steps:
+        """
+        super().__init__()
+
+        self.initial_learning_rate_ = initial_learning_rate
+        self.final_learning_rate_ = final_learning_rate
+        self.total_steps_ = total_steps
+
+        self.learning_rates = tf.convert_to_tensor((
+                10**np.linspace(np.log10(initial_learning_rate),
+                                np.log10(final_learning_rate), total_steps)).tolist(), dtype='float32')
+        self.total_steps = tf.constant(int(total_steps), dtype='int32')
+        self.final_learning_rate = tf.constant(final_learning_rate, dtype='float32')
+        self.learning_rate = None
+        self.name = 'LinearRamp' if name is None else name
+        self.current_step = None
+
+    def __call__(self, step):
+        """
+
+        Args:
+            step: The current step
+
+        Returns:
+        """
+
+        step = tf.cast(step, self.total_steps.dtype)
+        with tf.name_scope(self.name):
+            self.learning_rate = tf.cond(step < self.total_steps, lambda: self.learning_rates[step],
+                                         lambda: self.final_learning_rate)
+        self.current_step = step
+        return self.learning_rate
+
+    def get_config(self):
+        return {'initial_learning_rate': self.initial_learning_rate_,
+                'final_learning_rate': self.final_learning_rate_, 'total_steps': self.total_steps_,
+                'name': self.name}
+
+
+class BatchLossCallback(tf.keras.callbacks.Callback):
+
+    def __init__(self, logger, monitor: str = ("loss", "accuracy"),):
+        super().__init__()
+        self.logger = logger
+        self.monitor = monitor
+        self._current_epoch = None
+        self._current_steps = None
+        self.history = {'learning_rate': [], 'loss': [], 'accuracy': []}
+
+    def on_train_begin(self, logs=None):
+        self.logger.info("learning_rate,loss,accuracy")
+
+    def on_train_end(self, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self._current_epoch = epoch
+
+    def on_epoch_end(self, epoch, logs=None):
+        keys = list(logs.keys())
+        if keys:
+            pass
+
+    def on_train_batch_begin(self, batch, logs=None):
+        self._current_steps = -1 if self._current_steps is None else self._current_steps
+        self._current_steps += 1
+
+    def on_train_batch_end(self, batch, logs=None):
+        # Get configuration from the optimizer
+        lr = self.model.optimizer.lr.numpy()
+        self.logger.info(f"{lr},{logs['loss']},{logs['accuracy']}")
+        self.history['learning_rate'].append(lr)
+        self.history['loss'].append(logs['loss'])
+        self.history['accuracy'].append(logs['accuracy'])
 
 
 class PromptCallback(tf.keras.callbacks.Callback):
