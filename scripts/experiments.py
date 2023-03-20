@@ -141,6 +141,6 @@ def analyze_results(results):
 
 if __name__ == '__main__':
     # run_one()
-    ress = optimizer_checks('t5-base', 'fft')
+    ress = optimizer_checks('t5-small', 'fft')
     analyze_results(ress)
     # print(os.getcwd())

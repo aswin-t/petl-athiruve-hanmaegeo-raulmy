@@ -357,8 +357,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     if start_epoch >= epochs - 1:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
         if not force_rerun:
-            pass
-            # return True
+            return True
         else:
             filen = ''
             start_epoch = -1
