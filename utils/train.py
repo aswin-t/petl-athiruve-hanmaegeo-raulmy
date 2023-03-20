@@ -265,7 +265,8 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
             return True
         else:
             filen = ''
-            start_epoch = 0
+            start_epoch = -1
+    start_epoch += 1
 
     # Running this evaluation
     logger.info(f'This evaluation tag is {tag}')
@@ -352,7 +353,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
             # return True
         else:
             filen = ''
-            start_epoch = 0
+            start_epoch = -1
     start_epoch += 1
 
     # Running this evaluation

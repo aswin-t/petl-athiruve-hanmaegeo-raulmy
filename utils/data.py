@@ -636,7 +636,7 @@ class PrepDataset:
             # Load the data from CSV and tokenize
             splits[split] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/{split}.csv"),
                                              cache_dir=cache_path)
-            self.logger.info(f'Data sample for {split}: {splits[split]}')
+            self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
             tfsplits[split] = splits[split].map(tokenize)

@@ -3,7 +3,7 @@ from utils.train import run_benchmark
 from keras.optimizers.optimizer_experimental.adamw import AdamW
 
 
-def run_model(model_config: dict = None, optimizer_params=None, debug: bool = False, prefix=''):
+def run_model(tasks, model_config: dict, optimizer_params, debug: bool = False, prefix=''):
     """
 
     Args:
@@ -13,6 +13,7 @@ def run_model(model_config: dict = None, optimizer_params=None, debug: bool = Fa
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
                 'epochs': <Optional>
+        tasks:
         optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
@@ -26,20 +27,37 @@ def run_model(model_config: dict = None, optimizer_params=None, debug: bool = Fa
     optimizer_params = optimizer_default_params if optimizer_params is None else optimizer_params
     batch_size = 100
 
-    # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
-    tasks = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mnli'), ('glue', 'mrpc'), ('glue', 'sst2'))
-
     #  Run the superglue benchmnark
     run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
                   cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark=tasks,
                   one_task=None, prefix=prefix)
 
 
-if __name__ == '__main__':
+def run_fft():
     model_checkpoint = 't5-small'
     which_model = 'fft'
     learning_rate = 0.001
     mc = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 50}
     op = {'tag': f'adamw-learning_rate-{learning_rate:.6f}',
           'optimizer': AdamW(learning_rate=learning_rate)}
-    run_model(model_config=mc, optimizer_params=op, debug=False, prefix='athiruve')
+
+    # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
+    tasks = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mnli'), ('glue', 'mrpc'), ('glue', 'sst2'))
+    run_model(tasks=tasks, model_config=mc, optimizer_params=op, debug=False, prefix='athiruve')
+
+
+def run_soft():
+    model_checkpoint = 't5-small'
+    which_model = 'soft'
+    learning_rate = 0.001
+    mc = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 50}
+    op = {'tag': f'adamw-learning_rate-{learning_rate:.6f}',
+          'optimizer': AdamW(learning_rate=learning_rate)}
+
+    # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
+    tasks = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mnli'), ('glue', 'mrpc'), ('glue', 'sst2'))
+    run_model(tasks=tasks, model_config=mc, optimizer_params=op, debug=False, prefix='athiruve')
+
+
+if __name__ == '__main__':
+    run_fft()

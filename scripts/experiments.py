@@ -47,7 +47,7 @@ def run_few(model_checkpoint, which_model, optimizer_algo, output_path):
 
     """
 
-    batch_size = 100
+    batch_size = 10
     debug = False
     tasks = [('super_glue', 'multirc'), ('super_glue', 'rte'), ('glue', 'cola'), ('glue', 'qnli')]
     prefix = 'optimizer'
@@ -84,7 +84,7 @@ def optimizer_checks(model_checkpoint, which_model):
     # Learning rate on log scale
     optim_tag = str(algo).split('.')[-1].split("'>")[0]
     # These are the results for this configuration
-    filename = os.path.join(output_path, optim_tag + '.p')
+    filename = os.path.join(output_path, 'lro' + '-' + model_checkpoint + '-' + which_model + '-' + optim_tag + '.p')
     if not os.path.exists(filename):
         results = run_few(model_checkpoint, which_model, algo, output_path)
         with open(filename, 'wb') as outfi:
@@ -140,6 +140,7 @@ def analyze_results(results):
 
 
 if __name__ == '__main__':
-    run_one()
-    # ress = optimizer_checks('t5-small', 'fft')
-    # analyze_results(ress)
+    # run_one()
+    ress = optimizer_checks('t5-base', 'fft')
+    analyze_results(ress)
+    # print(os.getcwd())
