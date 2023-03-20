@@ -5,11 +5,12 @@ import re
 import copy
 import glob
 import time
-
 import tensorflow as tf
 from typing import Union
+from keras.optimizers.optimizer_experimental.adamw import AdamW
 from utils.data import PrepDataset
 from utils.log import create_logger
+from utils.constants import get_tasks
 from utils.metric import evaluate_metric
 from utils.model import get_model, model_history_to_dlog, PromptCallback, LinearRampScheduler, BatchLossCallback
 
@@ -283,7 +284,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path)
 
     # Increase the learning rate linearly within one training epoch
-    learning_scheduler = LinearRampScheduler(initial_learning_rate=1E-8, final_learning_rate=1,
+    learning_scheduler = LinearRampScheduler(initial_learning_rate=1E-7, final_learning_rate=10,
                                              total_steps=int(counts['train']/batch_size))
     optimizer = optimizer_algo(learning_rate=learning_scheduler)
 
@@ -293,9 +294,8 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     model.summary()
 
     # 5. Train the model
-    model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag)
     model_optimizer_callback = BatchLossCallback(logger=logger)
-    model.fit(tfsplits['train'], epochs=epochs,  callbacks=[model_checkpoint_callback, model_optimizer_callback],
+    model.fit(tfsplits['train'], epochs=epochs,  callbacks=[model_optimizer_callback, ],
               validation_data=tfsplits['val'], initial_epoch=start_epoch)
 
     # Delete the model
@@ -423,7 +423,24 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     return results
 
 
-def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: int = 4, cache_path: str = None,
+def _get_optimizer(optimizer_lrs, which_data):
+    """
+
+    Args:
+        optimizer_params:
+        which_data:
+
+    Returns:
+
+    """
+
+    optimizer = AdamW(optimizer_lrs[which_data])
+    optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]:.7f}'
+
+    return {'optimizer': optimizer, 'tag': optimizer_tag}
+
+
+def run_benchmark(model_config: dict = None, optimizer_lrs=None, batch_size: int = 4, cache_path: str = None,
                   checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue', one_task: str = None,
                   prefix=''):
     """
@@ -435,7 +452,7 @@ def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: 
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
                 'epochs': <Optional>
-        optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
+        optimizer_lrs: Dict with key as which_data as value as learning rate
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
         checkpoint_filepath: Path to store the model checkpoints and log file
@@ -451,16 +468,7 @@ def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: 
     prefix = prefix + '-' if prefix else prefix
 
     # These are the superglue tasks that we want to perform
-    if isinstance(benchmark, list) or isinstance(benchmark, tuple):
-        tasks = tuple(benchmark)
-    elif benchmark == 'glue':
-        tasks = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
-                 ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'wnli'), ('glue', 'stsb'), ('glue', 'mnli'))
-    elif benchmark == 'superglue':
-        tasks = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
-                 ('super_glue', 'multirc'), ('super_glue', 'cb'), ('super_glue', 'copa'))
-    else:
-        raise KeyError(f'Benchmark {benchmark} is not supported')
+    tasks = get_tasks(benchmark=benchmark)
 
     # Check of the one task is
     if one_task:
@@ -481,6 +489,8 @@ def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: 
             if task != one_task:
                 continue
 
+        # Get the optimizer params and then run model
+        optimizer_params = _get_optimizer(optimizer_lrs, which_data=task)
         try:
             # Run one experiment and log all results
             # If it fails then carry on
@@ -491,37 +501,3 @@ def run_benchmark(model_config: dict = None, optimizer_params=None, batch_size: 
             # Capture the exception and
             logger.exception(e)
             logger.warning('Exception was raised')
-
-
-def run_model(model_config: dict = None, optimizer_params=None, debug: bool = False, prefix=''):
-    """
-
-    Args:
-         model_config: Dictionary:
-                'model_checkpoint': <t5-small, t5-base>
-                'which_model': 'fft' -> full fine-tuning of all parameters.
-                               'soft' -> soft prompt is tuned
-                               'library' -> library of soft prompts
-                'epochs': <Optional>
-        optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
-        debug: if True then eager model of evaluation is run, else graph mode
-        prefix: Prefix to add to the model names
-    Returns:
-
-    """
-
-    cache_path = os.path.join(os.path.dirname(__file__), "../cache")
-    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
-    optimizer_default_params = {'algo': 'adam', 'params': {'learning_rate': 0.0001}}
-    optimizer_params = optimizer_default_params if optimizer_params is None else optimizer_params
-    batch_size = 100
-
-    #  Run the superglue benchmnark
-    run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
-                  cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark='superglue',
-                  one_task=None, prefix=prefix)
-
-    #  Run the superglue benchmnark
-    run_benchmark(model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
-                  cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark='glue',
-                  one_task=None, prefix=prefix)

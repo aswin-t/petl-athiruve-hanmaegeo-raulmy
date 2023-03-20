@@ -46,8 +46,10 @@ def run_few(model_checkpoint, which_model, optimizer_algo, output_path):
     Returns:
 
     """
-
-    batch_size = 25
+    if 'small' in model_checkpoint:
+        batch_size = 100
+    else:
+        batch_size = 25
     debug = False
     tasks = [('super_glue', 'multirc'), ('super_glue', 'rte'), ('glue', 'cola'), ('glue', 'qnli')]
     prefix = 'optimizer'
@@ -92,6 +94,7 @@ def optimizer_checks(model_checkpoint, which_model):
     else:
         with open(filename, 'rb') as infi:
             results = pickle.load(infi)
+
     return results
 
 
@@ -105,7 +108,7 @@ def analyze_results(results):
     for cnt, res in enumerate(results):
         x_ = np.array(res['learning_rate'])
         loss = np.array(res['loss'])
-        idx = x_ > 1E-7
+        idx = np.logical_and(x_ > 1E-7, x_ < 1)
 
         x_ = x_[idx]
         loss = loss[idx]
@@ -114,7 +117,8 @@ def analyze_results(results):
         loss_s.append(loss)
 
         # Find the derivative of multiple points
-        der = dxdt(loss, np.log10(x_), kind='finite_difference', k=3)
+        # der = dxdt(loss, np.log10(x_), kind='finite_difference', k=3)
+        der = dxdt(loss, np.log10(x_), kind='kalman', alpha=0.5)
         derivatives.append(der)
         min_der.append(np.min(der))
 
@@ -127,7 +131,8 @@ def analyze_results(results):
 
         plt.subplot(1, 2, 2)
         plt.plot(np.log10(x_), der, colors[cnt])
-        plt.ylim([None, 0])
+
+    plt.ylim([None, 0])
 
     plt.subplot(1, 2, 1)
     plt.xlabel("Log10 of learning rate")
@@ -139,8 +144,56 @@ def analyze_results(results):
     plt.show()
 
 
+def analyze_one(results):
+
+    for title, result in results.items():
+        plt.figure(figsize=(10, 4.8))
+
+        x_ = np.array(result['learning_rate'])
+        loss = np.array(result['loss'])
+
+        idx = np.logical_and(x_ > 1E-7, x_ < 1)
+        x_ = x_[idx]
+        loss = loss[idx]
+        min_loss = min(loss)
+
+        # Find the derivative of multiple points
+        der = dxdt(loss, np.log10(x_), kind='kalman', alpha=1)
+        idx = np.argmin(der)
+
+        optimal_lr = np.log10(x_[idx])
+        loss_at_optimal = loss[idx]
+        der_at_optimal = der[idx]
+
+        plt.subplot(1, 2, 1)
+        plt.plot(np.log10(x_), loss)
+        plt.plot([optimal_lr, optimal_lr], [loss_at_optimal, min_loss], '-k')
+
+        plt.subplot(1, 2, 2)
+        plt.plot(np.log10(x_), der)
+        plt.plot([optimal_lr, optimal_lr], [der_at_optimal, 0], '-k')
+        plt.ylim([None, 0])
+
+        plt.subplot(1, 2, 1)
+        plt.xlabel("Log10 of learning rate")
+        plt.ylabel("Training loss")
+
+        plt.subplot(1, 2, 2)
+        plt.xlabel("Log10 of learning rate")
+        plt.ylabel("derivative of training loss")
+        plt.suptitle(title + '-lr-' + f'{10**optimal_lr:.2e}')
+    plt.show()
+
+
+def analyze_all(results):
+
+    res_asdict = {f'{cnt}': v for cnt, v in enumerate(results)}
+    analyze_one(res_asdict)
+
+
 if __name__ == '__main__':
     # run_one()
     ress = optimizer_checks('t5-small', 'fft')
-    analyze_results(ress)
+    # analyze_results(ress)
+    analyze_all(ress)
     # print(os.getcwd())
