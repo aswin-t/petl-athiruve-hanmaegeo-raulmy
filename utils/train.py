@@ -1,7 +1,11 @@
 # Credit:https://github.com/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-Datasets%20Training.ipynb
 import os
+import gc
 import re
+import copy
 import glob
+import time
+
 import tensorflow as tf
 from typing import Union
 from utils.data import PrepDataset
@@ -242,6 +246,8 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     Returns:
 
     """
+    gc.enable()
+
     model_config = model_config.copy()
 
     # 1. Get and process inputs
@@ -295,8 +301,10 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # Delete the model
     del model
     tf.keras.backend.clear_session()
+    gc.collect()
+    time.sleep(20)
 
-    return model_optimizer_callback.history
+    return copy.deepcopy(model_optimizer_callback.history)
 
 
 def run_one_split(logger, model_config: dict = None, optimizer_params=None,
@@ -392,6 +400,8 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     # Delete the model
     del model
     tf.keras.backend.clear_session()
+    gc.collect()
+    time.sleep(15)
 
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
@@ -405,6 +415,12 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     # Save the soft prompts if this is a soft prompt model
     _save_soft_prompt(model, official_name, checkpoint_filepath, model_checkpoint, which_data)
 
+    # Delete the model
+    del model
+    tf.keras.backend.clear_session()
+    gc.collect()
+    time.sleep(15)
+    
     return results
 
 

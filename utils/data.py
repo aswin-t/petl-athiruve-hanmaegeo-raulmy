@@ -104,7 +104,7 @@ class LabelEncodeDecode:
 class PrepDataset:
 
     def __init__(self, logger, checkpoint: str, encoder_max_len=constants.ENCODER_MAX_LEN,
-                 decoder_max_len=constants.DECODER_MAX_LEN):
+                 decoder_max_len=constants.DECODER_MAX_LEN, num_proc=1):
         """
 
         Args:
@@ -124,6 +124,7 @@ class PrepDataset:
 
         self.train_dataset = None
         self.valid_dataset = None
+        self.num_proc = num_proc
 
     def __getstate__(self):
         state = self.__dict__
@@ -574,14 +575,14 @@ class PrepDataset:
 
             # Convert it into a question answer format
             remove_columns = [x for x in train_dataset.column_names if x not in ['id', 'idx', 'label']]
-            train_dataset = train_dataset.map(encoder, remove_columns=remove_columns)
-            valid_dataset = valid_dataset.map(encoder, remove_columns=remove_columns)
-            test_dataset = test_dataset.map(encoder, remove_columns=remove_columns)
+            train_dataset = train_dataset.map(encoder, remove_columns=remove_columns, num_proc=self.num_proc)
+            valid_dataset = valid_dataset.map(encoder, remove_columns=remove_columns, num_proc=self.num_proc)
+            test_dataset = test_dataset.map(encoder, remove_columns=remove_columns, num_proc=self.num_proc)
 
             remove_columns = ['q']
-            train_dataset = train_dataset.map(stl, remove_columns=remove_columns)
-            valid_dataset = valid_dataset.map(stl, remove_columns=remove_columns)
-            test_dataset = test_dataset.map(stl, remove_columns=remove_columns)
+            train_dataset = train_dataset.map(stl, remove_columns=remove_columns, num_proc=self.num_proc)
+            valid_dataset = valid_dataset.map(stl, remove_columns=remove_columns, num_proc=self.num_proc)
+            test_dataset = test_dataset.map(stl, remove_columns=remove_columns, num_proc=self.num_proc)
 
             self.logger.info(f'Data sample for train: {train_dataset[0]}')
             self.logger.info(f'Data sample for validation: {valid_dataset[0]}')
@@ -600,10 +601,10 @@ class PrepDataset:
 
                 # Remove the columns we do not need
                 remove_columns = [x for x in test_dataset.column_names if x not in ['id', 'idx', 'label']]
-                test_dataset = test_dataset.map(encoder, remove_columns=remove_columns)
+                test_dataset = test_dataset.map(encoder, remove_columns=remove_columns, num_proc=self.num_proc)
 
                 remove_columns = ['q']
-                test_dataset = test_dataset.map(stl, remove_columns=remove_columns)
+                test_dataset = test_dataset.map(stl, remove_columns=remove_columns, num_proc=self.num_proc)
                 test_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/ftest.csv"))
             except ValueError:
                 pass
@@ -639,7 +640,7 @@ class PrepDataset:
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
-            tfsplits[split] = splits[split].map(tokenize)
+            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc)
             counts[split] = len(splits[split])
 
             # Convert to TensorFlow dataset

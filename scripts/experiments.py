@@ -47,7 +47,7 @@ def run_few(model_checkpoint, which_model, optimizer_algo, output_path):
 
     """
 
-    batch_size = 10
+    batch_size = 25
     debug = False
     tasks = [('super_glue', 'multirc'), ('super_glue', 'rte'), ('glue', 'cola'), ('glue', 'qnli')]
     prefix = 'optimizer'
@@ -62,10 +62,10 @@ def run_few(model_checkpoint, which_model, optimizer_algo, output_path):
     # If it fails then carry on
     results = []
     for task in tasks:
-        result = run_lr_split(
-            logger, model_config=model_config, optimizer_algo=optimizer_algo, which_data=task,
-            batch_size=batch_size, cache_path=cache_path, checkpoint_filepath=output_path, debug=debug,
-            prefix=prefix, force_rerun=True)
+        result = run_lr_split(logger, model_config=model_config, optimizer_algo=optimizer_algo,
+                              which_data=task, batch_size=batch_size, cache_path=cache_path,
+                              checkpoint_filepath=output_path, debug=debug,
+                              prefix=prefix, force_rerun=True)
 
         results.append(result)
 
