@@ -420,7 +420,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     tf.keras.backend.clear_session()
     gc.collect()
     time.sleep(15)
-    
+
     return results
 
 
