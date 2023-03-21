@@ -9,7 +9,7 @@ from utils.train import run_lr_split
 from utils.constants import get_tasks
 
 
-def run_one(model_checkpoint, which_model, which_data, optimizer_algo, output_path):
+def run_one(model_checkpoint, which_model, which_data, optimizer_algo, output_path, batch_size):
     """
     Run a few tasks and return results
     Args:
@@ -17,15 +17,12 @@ def run_one(model_checkpoint, which_model, which_data, optimizer_algo, output_pa
         which_model: 'fft' or 'soft'
         which_data:
         optimizer_algo: Parameters for the optimizer
+        batch_size:
         output_path:
 
     Returns:
 
     """
-    if 'small' in model_checkpoint:
-        batch_size = 100
-    else:
-        batch_size = 25
 
     debug = False
     prefix = 'optimizer'
@@ -74,6 +71,7 @@ def analyze_results(results, output_path):
         idx = 0
         der = []
         while not done:
+            # noinspection PyBroadException
             try:
                 der = dxdt(loss, np.log10(x_), kind="kalman", alpha=0.5)
                 idx = np.argmin(der)
@@ -113,7 +111,7 @@ def analyze_results(results, output_path):
     return lrs
 
 
-def get_adamw_lrs(model_checkpoint, which_model, benchmark):
+def get_adamw_lrs(model_checkpoint, which_model, benchmark, batch_size):
     """
 
     Returns:
@@ -145,7 +143,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark):
             if not os.path.exists(filepath):
 
                 # Results from running one lr optimization loop
-                result = run_one(model_checkpoint, which_model, task, optimizer_algo, output_path)
+                result = run_one(model_checkpoint, which_model, task, optimizer_algo, output_path, batch_size)
                 with open(filepath, 'wb') as outfi:
                     pickle.dump(result, outfi)
             else:
@@ -173,5 +171,5 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark):
 
 
 if __name__ == '__main__':
-    ress = get_adamw_lrs('t5-small', 'fft', benchmark='target')
+    ress = get_adamw_lrs('t5-small', 'fft', benchmark='target', batch_size=25)
     print(ress)

@@ -78,7 +78,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, load_best: bool = False):
                 filen = filename
                 cur_epoch = epoch
                 cur_val = val
-    return filen, cur_epoch
+    return filen, cur_epoch, filenames
 
 
 def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_tag):
@@ -265,7 +265,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
         tag = prefix + '-' + tag
 
     # Is there a model that has already been created for this?
-    filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
+    filen, start_epoch, _ = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
     if start_epoch >= epochs - 1:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
         if not force_rerun:
@@ -305,6 +305,49 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     time.sleep(20)
 
     return copy.deepcopy(model_optimizer_callback.history)
+
+
+def _log_gpu_usage(logger, prefix):
+    """
+
+    Returns:
+
+    """
+
+    # Check the memory devices
+    gpu_devices = tf.config.list_physical_devices('GPU')
+    gpu_usage_str = ""
+    for cnt, _ in enumerate(gpu_devices):
+        usage = tf.config.experimental.get_memory_usage(f"GPU:{cnt}")
+        gpu_usage_str += f'GPU: {cnt}, Usage {usage}'
+    logger.info(f"{prefix}: {gpu_usage_str}")
+
+
+def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath):
+    """
+    For
+    Args:
+        logger: Logger object
+        tag: Filename tag to
+        checkpoint_filepath: Location of files
+
+    Returns:
+
+    """
+    # We need only two files:
+    # a. The final epoch, in case we want to continue
+    # b. The best validation score for model evaluations
+    filen_last, _, all_files = _load_checkpoint(tag, checkpoint_filepath)
+    filen_best, _, _ = _load_checkpoint(tag, checkpoint_filepath, load_best=True)
+    logger.info(f'Best model file is {filen_best}, last epoch file is {filen_last}')
+
+    # Remove these files
+    remove_files = [x for x in all_files if x not in [filen_last, filen_best]]
+    for fname in remove_files:
+        logger.info(f'Removing unwanted file {fname}')
+        if os.path.isfile(fname):
+            os.remove(fname)
+    return True
 
 
 def run_one_split(logger, model_config: dict = None, optimizer_params=None,
@@ -353,9 +396,10 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
         tag = prefix + '-' + tag
 
     # Is there a model that has already been created for this?
-    filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
+    filen, start_epoch, _ = _load_checkpoint(tag, checkpoint_filepath, load_best=False)
     if start_epoch >= epochs - 1:
         print('Model was previously run with equal or more epochs and completed. No need to run again')
+        _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath)
         if not force_rerun:
             return True
         else:
@@ -367,9 +411,10 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     logger.info(f'This evaluation tag is {tag}')
 
     # 3. Prepare the data
-    # Load teh data to memory
+    # Load the data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path)
+    _log_gpu_usage(logger, prefix="Dataset")
 
     # 4. Get the model
     # Load the appropriate model
@@ -383,11 +428,13 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
 
     # Display model summary
     model.summary()
+    _log_gpu_usage(logger, prefix="Model created")
 
     # 5. Train the model
     model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag)
     history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_checkpoint_callback, ],
                         validation_data=tfsplits['val'], initial_epoch=start_epoch)
+    _log_gpu_usage(logger, prefix="Model fit")
 
     if history.history:
         # Save history and metrics
@@ -402,11 +449,17 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     gc.collect()
     time.sleep(15)
 
+    # Log the GPU usage
+    _log_gpu_usage(logger, prefix="Model cleared")
+
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
-    filen, start_epoch = _load_checkpoint(tag, checkpoint_filepath, load_best=True)
-    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
+    filen_best, start_epoch, all_files = _load_checkpoint(tag, checkpoint_filepath, load_best=True)
+
+    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen_best)
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
+
+    _log_gpu_usage(logger, prefix="Model evaluated")
 
     # Append history before returning
     results['history'] = history
@@ -420,6 +473,11 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     gc.collect()
     time.sleep(15)
 
+    # Done with everything, so remove all unwanted files
+    _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath)
+
+    # Log GPU usage after everything is done
+    _log_gpu_usage(logger, prefix="return")
     return results
 
 
@@ -427,7 +485,7 @@ def _get_optimizer(optimizer_lrs, which_data):
     """
 
     Args:
-        optimizer_params:
+        optimizer_lrs:
         which_data:
 
     Returns:
