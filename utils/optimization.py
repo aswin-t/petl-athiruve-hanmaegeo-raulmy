@@ -41,6 +41,35 @@ def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, o
     return result
 
 
+def _fine_tuning_lr(x_, loss, der, idx):
+    """
+
+    Args:
+        x_:
+        loss:
+        der:
+        idx:
+
+    Returns:
+
+    """
+
+    x_ = x_[:idx+1]
+    loss = loss[:idx+1]
+    der = der[:idx+1]
+
+    # Index the lr lower than 0
+    idx = (der.shape[0] - np.sum(np.flip(der) < 0)) - 1
+    der = der[idx+1:]
+    x_ = x_[idx+1:]
+    loss = loss[idx+1:]
+
+    # Fine tuning LR
+    optimal_ft_lr = np.mean(np.log10(x_))
+
+    return x_, loss, der, optimal_ft_lr
+
+
 def analyze_results(results, output_path):
     """
 
@@ -52,7 +81,7 @@ def analyze_results(results, output_path):
 
     """
 
-    lrs = {}
+    lrs = {'training': {}, 'fine_tuning': {}}
     for title, (result, task) in results.items():
         plt.figure(figsize=(10, 4.8))
 
@@ -82,25 +111,35 @@ def analyze_results(results, output_path):
         loss_at_optimal = loss[idx]
         der_at_optimal = der[idx]
 
+        x__, loss_, der_, optimal_ft_lr = _fine_tuning_lr(x_, loss, der, idx)
+
         plt.subplot(1, 2, 1)
         plt.plot(np.log10(x_), loss)
+        plt.plot(np.log10(x__), loss_)
         plt.plot([optimal_lr, optimal_lr], [loss_at_optimal, 0], '-k')
+        plt.plot([optimal_ft_lr, optimal_ft_lr], [loss_at_optimal, 0], '-r')
 
         plt.subplot(1, 2, 2)
         plt.plot(np.log10(x_), der)
+        plt.plot(np.log10(x__), der_)
         plt.plot([optimal_lr, optimal_lr], [der_at_optimal, 0], '-k')
+        plt.plot([optimal_ft_lr, optimal_ft_lr], [der_at_optimal, 0], '-r')
         plt.ylim([None, 0])
 
         plt.subplot(1, 2, 1)
         plt.xlabel("Log10 of learning rate")
         plt.ylabel("Training loss")
 
+        optimal_lr = 10**optimal_lr
+        optimal_ft_lr = 10**optimal_ft_lr
+
+        lrs['training'][task] = optimal_lr
+        lrs['fine_tuning'][task] = optimal_ft_lr
+
         plt.subplot(1, 2, 2)
         plt.xlabel("Log10 of learning rate")
         plt.ylabel("derivative of training loss")
-        plt.suptitle(title + '-' + f'{10**optimal_lr:.6f}')
-
-        lrs[task] = 10**optimal_lr
+        plt.suptitle(title + '-' + f'{optimal_lr:.8f} - {optimal_ft_lr:.8f} - ratio {optimal_lr/optimal_ft_lr:0f}')
 
         filepath = os.path.join(output_path, 'lro-' + title + '.png')
         plt.savefig(filepath)

@@ -21,7 +21,7 @@ def get_tasks(benchmark):
     """
 
     if benchmark == 'target':
-        tasks = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mnli'), ('glue', 'mrpc'), ('glue', 'sst2'))
+        tasks = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mrpc'), ('glue', 'sst2'), ('glue', 'mnli'))
     elif benchmark == 'glue':
         tasks = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
                  ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'wnli'), ('glue', 'stsb'), ('glue', 'mnli'))

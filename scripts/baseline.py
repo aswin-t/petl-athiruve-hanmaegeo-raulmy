@@ -1,6 +1,5 @@
 import os
 import pickle
-from utils import constants
 from utils.log import create_logger
 from utils.train import run_benchmark
 
@@ -61,7 +60,7 @@ def run_fft():
         raise FileNotFoundError('Was optimization run to get learning rates?')
 
     # Scale the learning rate by the number of epochs * number of batches per epoch
-    optimizer_lrs = {k: v/(constants.COUNTS[k]/batch_size)**0.5 for k, v in optimizer_lrs.items()}
+    optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_lrs=optimizer_lrs, debug=False,
