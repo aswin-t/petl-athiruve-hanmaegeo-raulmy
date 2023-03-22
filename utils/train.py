@@ -9,7 +9,6 @@ import tensorflow as tf
 from typing import Union
 from keras.optimizers.optimizer_experimental.adamw import AdamW
 from utils.data import PrepDataset
-from utils.log import create_logger
 from utils.constants import get_tasks
 from utils.metric import evaluate_metric
 from utils.model import get_model, model_history_to_dlog, PromptCallback, LinearRampScheduler, BatchLossCallback
@@ -254,6 +253,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # 1. Get and process inputs
     # Get inputs from model config
     model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data = _get_config(model_config)
+    logger.info(f'LR optimization on checkpoint {model_checkpoint} of {which_model}')
 
     # Get model official name
     official_name = _get_model_official_name(which_model)
@@ -282,6 +282,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # Load teh data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path)
+    _log_gpu_usage(logger, prefix="Dataset")
 
     # Increase the learning rate linearly within one training epoch
     learning_scheduler = LinearRampScheduler(initial_learning_rate=1E-7, final_learning_rate=10,
@@ -292,17 +293,20 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # Load the appropriate model
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
     model.summary()
+    _log_gpu_usage(logger, prefix="Model created")
 
     # 5. Train the model
     model_optimizer_callback = BatchLossCallback(logger=logger)
     model.fit(tfsplits['train'], epochs=epochs,  callbacks=[model_optimizer_callback, ],
               validation_data=tfsplits['val'], initial_epoch=start_epoch)
+    _log_gpu_usage(logger, prefix="Model fit")
 
     # Delete the model
     del model
     tf.keras.backend.clear_session()
     gc.collect()
     time.sleep(20)
+    _log_gpu_usage(logger, prefix="return")
 
     return copy.deepcopy(model_optimizer_callback.history)
 
@@ -318,9 +322,9 @@ def _log_gpu_usage(logger, prefix):
     gpu_devices = tf.config.list_physical_devices('GPU')
     gpu_usage_str = ""
     for cnt, _ in enumerate(gpu_devices):
-        usage = tf.config.experimental.get_memory_usage(f"GPU:{cnt}")
-        gpu_usage_str += f'GPU: {cnt}, Usage {usage}'
-    logger.info(f"{prefix}: {gpu_usage_str}")
+        usage = tf.config.experimental.get_memory_info(f"GPU:{cnt}")['current']
+        gpu_usage_str += f'GPU: {cnt} Usage: {usage},'
+    logger.info(f"{prefix}: {gpu_usage_str[:-1]}")
 
 
 def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath):
@@ -455,7 +459,6 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
     filen_best, start_epoch, all_files = _load_checkpoint(tag, checkpoint_filepath, load_best=True)
-
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen_best)
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['test'])
 
@@ -493,17 +496,18 @@ def _get_optimizer(optimizer_lrs, which_data):
     """
 
     optimizer = AdamW(optimizer_lrs[which_data])
-    optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]:.7f}'
+    optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]}'
 
     return {'optimizer': optimizer, 'tag': optimizer_tag}
 
 
-def run_benchmark(model_config: dict = None, optimizer_lrs=None, batch_size: int = 4, cache_path: str = None,
+def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_size: int = 4, cache_path: str = None,
                   checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue', one_task: str = None,
                   prefix=''):
     """
 
     Args:
+        logger: Logger object
         model_config: Dictionary:
                 'model_checkpoint': <t5-small, t5-base>
                 'which_model': 'fft' -> full fine-tuning of all parameters.
@@ -535,10 +539,6 @@ def run_benchmark(model_config: dict = None, optimizer_lrs=None, batch_size: int
                 break
         else:
             raise KeyError(f'Task {one_task} is not in benchmark {benchmark}')
-
-    # Create a log object
-    logger = create_logger(checkpoint_filepath, filename=f'{prefix}benchmark.log')
-    logger.info(f'Performing {benchmark} tuning')
 
     # For each task run the model
     for task in tasks:

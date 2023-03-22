@@ -9,10 +9,11 @@ from utils.train import run_lr_split
 from utils.constants import get_tasks
 
 
-def run_one(model_checkpoint, which_model, which_data, optimizer_algo, output_path, batch_size):
+def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, output_path, batch_size):
     """
     Run a few tasks and return results
     Args:
+        logger: Logger object
         model_checkpoint: Model checkpoint to use
         which_model: 'fft' or 'soft'
         which_data:
@@ -29,9 +30,6 @@ def run_one(model_checkpoint, which_model, which_data, optimizer_algo, output_pa
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 1}
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
-
-    # Create a log object
-    logger = create_logger(output_path, filename=f'optimizer_experiments.log')
 
     # Run one experiment and log all results
     # If it fails then carry on
@@ -120,6 +118,9 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, batch_size):
     os.makedirs(output_path, exist_ok=True)
     optimizer_algo = AdamW
 
+    # Create a log object
+    logger = create_logger(output_path, filename=f'optimizer_experiments.log')
+
     # Learning rate on log scale
     all_tasks_tag = model_checkpoint + '-' + which_model + '-' + benchmark
     filepath_all = os.path.join(output_path, 'lro-data-' + all_tasks_tag + '.p')
@@ -143,7 +144,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, batch_size):
             if not os.path.exists(filepath):
 
                 # Results from running one lr optimization loop
-                result = run_one(model_checkpoint, which_model, task, optimizer_algo, output_path, batch_size)
+                result = run_one(logger, model_checkpoint, which_model, task, optimizer_algo, output_path, batch_size)
                 with open(filepath, 'wb') as outfi:
                     pickle.dump(result, outfi)
             else:

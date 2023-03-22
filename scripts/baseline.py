@@ -1,5 +1,7 @@
 import os
 import pickle
+from utils import constants
+from utils.log import create_logger
 from utils.train import run_benchmark
 
 
@@ -27,8 +29,14 @@ def run_model(benchmark, model_config: dict, optimizer_lrs: dict, checkpoint_fil
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
     batch_size = 100 if batch_size is None else batch_size
 
+    # Create a log object
+    model_checkpoint = model_config['model_checkpoint']
+    which_model = model_config['which_model']
+    logger = create_logger(checkpoint_filepath, filename=f'{prefix}-{model_checkpoint}-{which_model}-benchmark.log')
+    logger.info(f'Performing {benchmark} tuning')
+
     #  Run the superglue benchmnark
-    run_benchmark(model_config=model_config, optimizer_lrs=optimizer_lrs, batch_size=batch_size,
+    run_benchmark(logger, model_config=model_config, optimizer_lrs=optimizer_lrs, batch_size=batch_size,
                   cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark=benchmark,
                   one_task=None, prefix=prefix)
 
@@ -38,7 +46,8 @@ def run_fft():
     which_model = 'fft'
     benchmark = 'target'
     batch_size = 100
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 50}
+    epochs = 30
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': epochs}
     checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
 
     # Benchmark of target signifies target tasks
@@ -50,6 +59,9 @@ def run_fft():
             optimizer_lrs = pickle.load(infi)
     except FileNotFoundError:
         raise FileNotFoundError('Was optimization run to get learning rates?')
+
+    # Scale the learning rate by the number of epochs * number of batches per epoch
+    optimizer_lrs = {k: v/(constants.COUNTS[k]/batch_size)**0.5 for k, v in optimizer_lrs.items()}
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_lrs=optimizer_lrs, debug=False,

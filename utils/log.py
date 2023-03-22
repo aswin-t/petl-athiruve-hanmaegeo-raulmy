@@ -17,7 +17,7 @@ def create_logger(output_folder, filename='model_logs.log', file_level=logging.I
     os.makedirs(output_folder, exist_ok=True)
 
     # Get a logger object
-    logger = logging.getLogger('common')
+    logger = logging.getLogger(filename)
 
     #
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

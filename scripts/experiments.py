@@ -1,28 +1,34 @@
 import os
 import pickle
 import numpy as np
+import tensorflow as tf
 from derivative import dxdt
 import matplotlib.pyplot as plt
 from keras.optimizers.optimizer_experimental.adamw import AdamW
+from utils.data import PrepDataset
 from utils.log import create_logger
+from utils.constants import get_tasks
 from utils.train import run_one_split, run_lr_split
 
 
 def run_one():
     batch_size = 100
     debug = False
-    task = ('glue', 'mnli')
+    task = ('super_glue', 'multirc')
     prefix = 'experiment'
-    # model_config = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 0,
-    #                 'prompt_transfer': {'model_checkpoint': 't5-small',
-    #                 'which_data': ('super_glue', 'boolq')}}
-    model_config = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'epochs': 1}
-    learning_rate = 0.001
+    learning_rate = 2E-4/100  # sst2 - 1E-5  # rte - 1.5E-3
+    epochs = 30
+
+    model_config = {'model_checkpoint': 't5-small', 'which_model': 'fft', 'epochs': 10}
+    scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts(
+        initial_learning_rate=learning_rate, t_mul=2, first_decay_steps=int(epochs/3)*25, m_mul=0.1)
+
     optimizer_params = {'tag': f'adamw-learning_rate-{learning_rate:.6f}',
                         'optimizer': AdamW(learning_rate=learning_rate)}
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
-    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/experiments")
+    os.makedirs(output_path, exist_ok=True)
 
     # Create a log object
     logger = create_logger(output_path, filename=f'experiments.log')
@@ -185,6 +191,29 @@ def analyze_one(results):
     plt.show()
 
 
+def get_training_samples(model_checkpoint):
+    cache_path = os.path.join(os.path.dirname(__file__), "../cache")
+    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/batches")
+    os.makedirs(output_path, exist_ok=True)
+
+    # Create a log object
+    logger = create_logger(output_path, filename=f'experiments.log')
+
+    dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
+
+    results = {}
+    for benchmark in ['superglue', ]:
+        tasks = get_tasks(benchmark)
+        results[benchmark] = {}
+        for task in tasks:
+            _, _, counts = dprep.load(which=task, batch_size=1, cache_path=cache_path)
+            print(f"{task}: {counts['train']}")
+            results[benchmark][task] = counts['train']
+
+    with open('sizes.p', 'wb') as outfi:
+        pickle.dump(results, outfi)
+
+
 def analyze_all(results):
 
     res_asdict = {f'{cnt}': v for cnt, v in enumerate(results)}
@@ -193,7 +222,8 @@ def analyze_all(results):
 
 if __name__ == '__main__':
     # run_one()
-    ress = optimizer_checks('t5-small', 'fft')
+    get_training_samples('t5-small')
+    # ress = optimizer_checks('t5-small', 'fft')
     # analyze_results(ress)
-    analyze_all(ress)
+    # analyze_all(ress)
     # print(os.getcwd())
