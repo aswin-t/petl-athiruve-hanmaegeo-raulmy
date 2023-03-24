@@ -5,9 +5,9 @@ import tensorflow as tf
 from derivative import dxdt
 import matplotlib.pyplot as plt
 from keras.optimizers.optimizer_experimental.adamw import AdamW
+from utils.constants import Tasks
 from utils.data import PrepDataset
 from utils.log import create_logger
-from utils.constants import get_tasks
 from utils.train import run_one_split, run_lr_split
 
 
@@ -203,7 +203,7 @@ def get_training_samples(model_checkpoint):
 
     results = {}
     for benchmark in ['superglue', ]:
-        tasks = get_tasks(benchmark)
+        tasks = Tasks()[benchmark]
         results[benchmark] = {}
         for task in tasks:
             _, _, counts = dprep.load(which=task, batch_size=1, cache_path=cache_path)

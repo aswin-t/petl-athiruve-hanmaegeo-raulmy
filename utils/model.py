@@ -865,7 +865,7 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         wandb = self.encoder.prompt.get_weights()
 
         # Save the weights
-        filen = filepath
+        filen = filepath + '.npy'
         np.save(filen, wandb[0])
 
         return True
@@ -884,7 +884,7 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         wandb = []
 
         # Save the weights
-        filen = filepath
+        filen = filepath + '.npy'
         wandb.append(np.load(filen))
 
         # Load the weights into arrays
@@ -1027,8 +1027,8 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         params = {"learning_rate": 0.001}
         optimizer = tf.keras.optimizers.Adam(**params)
 
-    if which_model == "PETLSoftPrompt":
-        logger.info(f'Loading PETLSoftPrompt model')
+    if which_model in ["PETLSoftPrompt", "PETLSoftPromptTransfer"]:
+        logger.info(f'Loading {which_model} model')
         # Create a model instance
         model = PETLSoftPrompt.from_pretrained(checkpoint)
         if checkpoint_file:

@@ -8,8 +8,8 @@ import time
 import tensorflow as tf
 from typing import Union
 from keras.optimizers.optimizer_experimental.adamw import AdamW
+from utils.constants import Tasks
 from utils.data import PrepDataset
-from utils.constants import get_tasks
 from utils.metric import evaluate_metric
 from utils.model import get_model, model_history_to_dlog, PromptCallback, LinearRampScheduler, BatchLossCallback
 
@@ -92,13 +92,13 @@ def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_tag):
     return tag
 
 
-def _create_prompt_tag(model_checkpoint, which_data):
+def create_prompt_tag(model_checkpoint, model_name, which_data):
     """
 
     Returns: A tag for this unique model configuration
 
     """
-    tag = model_checkpoint + '-'
+    tag = model_checkpoint + '-' + model_name + '-'
     tag += "".join(f'{x}-' for x in which_data)
     return tag[:-1]
 
@@ -126,7 +126,7 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         os.makedirs(filepath, exist_ok=True)
 
         # Only the model checkpoint
-        prompt_tag = _create_prompt_tag(model_checkpoint, which_data)
+        prompt_tag = create_prompt_tag(model_checkpoint, which_model, which_data)
         model.save_prompt(os.path.join(filepath, 'soft-prompt-' + prompt_tag))
 
         return prompt_tag
@@ -134,7 +134,7 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         return ""
 
 
-def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint, which_data):
+def _load_soft_prompt(model, which_model, prompt_model, checkpoint_filepath, model_checkpoint, which_data):
     """
     Save the prompt
 
@@ -143,13 +143,14 @@ def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         model_checkpoint: Checkpoint from which the model was loaded
         checkpoint_filepath: Filepath to store the prompts
         which_model: Prompts are only saved for the soft model
+        prompt_model: Model for which teh prompt is to be laoded
         which_data: Which data was fit for the model
     Returns:
 
     """
 
     # This is a model we want to save the prompts for
-    if which_model == 'PETLSoftPrompt':
+    if which_model in ['PETLSoftPrompt', 'PETLSoftPromptTransfer']:
         # Soft prompt is not requested
         if not (model_checkpoint and which_data):
             return ""
@@ -160,8 +161,8 @@ def _load_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         os.makedirs(filepath, exist_ok=True)
 
         # Only the model checkpoint
-        prompt_tag = _create_prompt_tag(model_checkpoint, which_data)
-        model.load_prompt(os.path.join(checkpoint_filepath, 'soft-prompt-' + prompt_tag))
+        prompt_tag = create_prompt_tag(model_checkpoint, prompt_model, which_data)
+        model.load_prompt(os.path.join(filepath, 'soft-prompt-' + prompt_tag))
 
         return prompt_tag
     else:
@@ -184,7 +185,7 @@ def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
         filepath = os.path.join(checkpoint_filepath, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
         model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=filepath, save_weights_only=True)
     elif official_name == 'PETLSoftPrompt':
-        filepath = os.path.join(checkpoint_filepath, tag)
+        filepath = os.path.join(checkpoint_filepath, 'soft_prompt', tag)
         model_checkpoint_callback = PromptCallback(filepath=filepath, best_is_lower=False)
     else:
         raise NotImplementedError(f'Callback for model type {official_name} is not supported')
@@ -192,9 +193,19 @@ def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
     return model_checkpoint_callback
 
 
-def _get_model_official_name(which_model):
+def get_model_official_name(which_model):
+    """
+
+    Args:
+        which_model:
+
+    Returns:
+
+    """
     if which_model.lower() in ['sp', 'soft_prompt', 'softprompt', 'soft', 'petl']:
         model_name = 'PETLSoftPrompt'
+    elif which_model.lower() in ['spt', 'soft_prompt_transfer', 'softprompttransfer']:
+        model_name = 'PETLSoftPromptTransfer'
     elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
         model_name = 'FullFineTune'
     else:
@@ -211,14 +222,16 @@ def _get_config(model_config):
     if prompt_specs is not None:
         prompt_model_checkpoint = prompt_specs['model_checkpoint']
         prompt_which_data = prompt_specs['which_data']
+        prompt_which_model = prompt_specs['which_model']
     else:
         prompt_model_checkpoint = ''
         prompt_which_data = ''
+        prompt_which_model = ''
 
     if model_config:
         raise KeyError(f'Unexpected keys {list(model_config.keys())} in model_config')
 
-    return model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data
+    return model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data, prompt_which_model
 
 
 def run_lr_split(logger, optimizer_algo, model_config: dict = None,
@@ -252,11 +265,12 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
 
     # 1. Get and process inputs
     # Get inputs from model config
-    model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data = _get_config(model_config)
-    logger.info(f'LR optimization on checkpoint {model_checkpoint} of {which_model}')
+    model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
+        _get_config(model_config)
+    logger.info(f'LR optimization on checkpoint {model_checkpoint} of {prompt_which_model}')
 
     # Get model official name
-    official_name = _get_model_official_name(which_model)
+    official_name = get_model_official_name(which_model)
 
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
@@ -292,6 +306,14 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # 4. Get the model
     # Load the appropriate model
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
+    if prompt_model_checkpoint:
+        prompt_official_name = get_model_official_name(prompt_which_model)
+        prompt_checkpoint_filepath = os.path.join(checkpoint_filepath, "..")
+        # Load the soft prompt for this model
+        prompt_tag = _load_soft_prompt(model, official_name, prompt_official_name, prompt_checkpoint_filepath,
+                                       prompt_model_checkpoint, prompt_which_data)
+        tag += '-softprompt-' + prompt_tag
+
     model.summary()
     _log_gpu_usage(logger, prefix="Model created")
 
@@ -319,7 +341,7 @@ def _log_gpu_usage(logger, prefix):
     """
 
     # Check the memory devices
-    gpu_devices = tf.config.list_physical_devices('GPU')
+    gpu_devices = tf.config.get_visible_devices('GPU')
     gpu_usage_str = ""
     for cnt, _ in enumerate(gpu_devices):
         usage = tf.config.experimental.get_memory_info(f"GPU:{cnt}")['current']
@@ -383,7 +405,8 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
 
     # 1. Get and process inputs
     # Get inputs from model config
-    model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data = _get_config(model_config)
+    model_checkpoint, which_model, epochs,  prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
+        _get_config(model_config)
 
     # Get the optimizer specifications
     optimizer_params = {} if optimizer_params is None else optimizer_params
@@ -391,7 +414,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     optimizer_tag = check_config(optimizer_params, 'tag', default='adam-learning_rate-0.001', required=False)
 
     # Get model official name
-    official_name = _get_model_official_name(which_model)
+    official_name = get_model_official_name(which_model)
 
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
@@ -425,9 +448,10 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
 
     if prompt_model_checkpoint:
+        prompt_official_name = get_model_official_name(which_model)
         # Load the soft prompt for this model
-        prompt_tag = _load_soft_prompt(model, official_name, checkpoint_filepath, prompt_model_checkpoint,
-                                       prompt_which_data)
+        prompt_tag = _load_soft_prompt(model, official_name, prompt_official_name, checkpoint_filepath,
+                                       prompt_model_checkpoint, prompt_which_data)
         tag += '-softprompt-' + prompt_tag
 
     # Display model summary
@@ -501,9 +525,9 @@ def _get_optimizer(optimizer_lrs, which_data):
     return {'optimizer': optimizer, 'tag': optimizer_tag}
 
 
-def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_size: int = 4, cache_path: str = None,
-                  checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue', one_task: str = None,
-                  prefix=''):
+def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_size: Union[int, dict] = 4,
+                  cache_path: str = None, checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue',
+                  one_task: str = None, prefix=''):
     """
 
     Args:
@@ -526,11 +550,16 @@ def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_s
     Returns:
 
     """
+
     one_task = '' if one_task is None else one_task
     prefix = prefix + '-' if prefix else prefix
 
     # These are the superglue tasks that we want to perform
-    tasks = get_tasks(benchmark=benchmark)
+    tasks = Tasks()[benchmark]
+
+    # Convert batch size into a dictionary to pick a value for each task
+    if isinstance(batch_size, int):
+        batch_size = {k: batch_size for k in tasks}
 
     # Check of the one task is
     if one_task:
@@ -550,10 +579,11 @@ def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_s
         # Get the optimizer params and then run model
         optimizer_params = _get_optimizer(optimizer_lrs, which_data=task)
         try:
+            # Get the batch size
             # Run one experiment and log all results
             # If it fails then carry on
             run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
-                          batch_size=batch_size, cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
+                          batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
                           debug=debug, prefix=prefix)
         except Exception as e:
             # Capture the exception and

@@ -9,26 +9,25 @@ COUNTS = {('glue', 'cola'): 8551, ('glue', 'mrpc'): 3668, ('glue', 'qnli'): 1047
           ('super_glue', 'wic'): 5428, ('super_glue', 'wsc.fixed'): 554, ('super_glue', 'multirc'): 27243,
           ('super_glue', 'cb'): 250, ('super_glue', 'copa'): 400}
 
+GLUE_TASKS = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'), ('glue', 'rte'), ('glue', 'sst2'),
+              ('glue', 'wnli'), ('glue', 'stsb'), ('glue', 'mnli'))
+SUPERGLUE_TASKS = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
+                   ('super_glue', 'multirc'), ('super_glue', 'cb'), ('super_glue', 'copa'))
+TARGET_TASKS = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mrpc'), ('glue', 'sst2'), ('glue', 'mnli'))
 
-def get_tasks(benchmark):
-    """
 
-    Args:
-        benchmark:
+class Tasks:
 
-    Returns:
+    def __getitem__(self, item):
+        if item.lower() == 'glue':
+            return GLUE_TASKS
+        elif item.lower() in ['superglue', 'super_glue']:
+            return SUPERGLUE_TASKS
+        elif item.lower() in ['target', 'target_tasks', 'target tasks']:
+            return TARGET_TASKS
+        elif item.lower() in ['source', 'source_tasks', 'source tasks']:
+            return tuple([task for task in GLUE_TASKS + SUPERGLUE_TASKS if task not in TARGET_TASKS])
 
-    """
 
-    if benchmark == 'target':
-        tasks = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mrpc'), ('glue', 'sst2'), ('glue', 'mnli'))
-    elif benchmark == 'glue':
-        tasks = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
-                 ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'wnli'), ('glue', 'stsb'), ('glue', 'mnli'))
-    elif benchmark == 'superglue':
-        tasks = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
-                 ('super_glue', 'multirc'), ('super_glue', 'cb'), ('super_glue', 'copa'))
-    else:
-        raise KeyError(f'Benchmark {benchmark} is not supported')
-
-    return tasks
+if __name__ == '__main__':
+    print(Tasks()['glue'])
