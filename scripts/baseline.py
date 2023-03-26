@@ -134,5 +134,6 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
 if __name__ == '__main__':
     # soft_experiment(benchmark='target', gpu=0, epochs=30)
     # run_fft()
-    run_soft(benchmark='target', gpu=0, epochs=30, model_checkpoint='t5-base', max_batch_size=25)
+    model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
+    run_soft(benchmark='target', gpu=0, epochs=1, model_checkpoint=model_checkpoint_, max_batch_size=25)
     # run_soft(benchmark='super_glue', gpu=1, epochs=30)

@@ -12,6 +12,7 @@ from transformers.utils import ContextManagers
 from transformers.modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput, \
     TFBaseModelOutputWithPastAndCrossAttentions
 from utils import constants
+from utils.metric import SelectiveSparseTopKCategoricalAccuracy
 
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
@@ -1018,6 +1019,8 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         debug: If debug is True then model is run in eager model otherwise in graph mode
         logger: Logger for logging progress
         checkpoint_file: File to load checkpoint, if available
+        dprep: Data preparatio object
+        led: Label encode/decode object
 
     Returns:
     """
@@ -1074,8 +1077,8 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
 
     # Compile the model with Categorical accuracy metric
     model.compile(optimizer=optimizer,
-                  #  metrics=SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1),
-                  metrics=tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
+                  metrics=SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1),
+                  # metrics=tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
                   loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),
                   run_eagerly=debug)
     return model

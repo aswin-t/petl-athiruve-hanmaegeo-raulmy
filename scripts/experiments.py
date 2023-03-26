@@ -223,6 +223,20 @@ def analyze_all(results):
     analyze_one(res_asdict)
 
 
+def token():
+
+    checkpoint = "google/t5-base-lm-adapt"
+    # Get the tokenizer for this data
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint.replace('_-_', '/'),
+                                              model_max_length=constants.ENCODER_MAX_LEN)
+    text = 'summarize: There is so much work, I am behind on my HW, lectures and my office work.'
+    intoken = tokenizer(text, return_tensors='tf')
+    model = TFT5ForConditionalGeneration.from_pretrained(checkpoint)
+    out_tokens = model.generate(intoken['input_ids'].numpy().tolist(), max_length=50)
+    print(out_tokens)
+    print(tokenizer.decode(out_tokens.numpy().reshape(-1, ), skip_special_tokens=False))
+
+
 def soft_experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, benchmark='glue', epochs=30,
                     gpu=0):
     """
@@ -255,11 +269,12 @@ def soft_experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_bat
 
     # Ensure at least 50 batches
     # task = ('super_glue', 'rte')
-    task = ('glue', 'rte')
+    # task = ('super_glue', 'multirc')
+    task = ('super_glue', 'boolq')
     batch_size = {task: min(max_batch_size, int(constants.COUNTS[task]/min_num_batches))}
 
     # for lr in [1E-7, 1E-6, 3E-6, 1E-5, 1E-4, 1E-3, 1E-3, 1E-1, 1, 10]:
-    for lr in [0.3, ]:
+    for lr in [0.1, ]:
         # Get the batch size
         # Run one experiment and log all results
         # If it fails then carry on
@@ -268,20 +283,6 @@ def soft_experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_bat
         run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
                       batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
                       debug=True, prefix=prefix)
-
-
-def token():
-
-    checkpoint = "google/t5-base-lm-adapt"
-    # Get the tokenizer for this data
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint.replace('_-_', '/'),
-                                              model_max_length=constants.ENCODER_MAX_LEN)
-    text = 'summarize: There is so much work, I am behind on my HW, lectures and my office work.'
-    intoken = tokenizer(text, return_tensors='tf')
-    model = TFT5ForConditionalGeneration.from_pretrained(checkpoint)
-    out_tokens = model.generate(intoken['input_ids'].numpy().tolist(), max_length=50)
-    print(out_tokens)
-    print(tokenizer.decode(out_tokens.numpy().reshape(-1, ), skip_special_tokens=False))
 
 
 if __name__ == '__main__':

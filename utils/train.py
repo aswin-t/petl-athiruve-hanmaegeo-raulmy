@@ -8,7 +8,6 @@ import time
 import tensorflow as tf
 from typing import Union
 from keras.optimizers.optimizer_experimental.adamw import AdamW
-from keras.optimizers.optimizer_experimental.adafactor import Adafactor
 from utils.constants import Tasks
 from utils.data import PrepDataset
 from utils.metric import evaluate_metric
@@ -523,11 +522,8 @@ def get_optimizer(optimizer_lrs, which_data):
 
     """
 
-    # optimizer = AdamW(optimizer_lrs[which_data])
-    # optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]}'
-    optimizer = Adafactor(optimizer_lrs[which_data])
-    optimizer_tag = f'adafactor-learning_rate-{optimizer_lrs[which_data]}'
-
+    optimizer = AdamW(optimizer_lrs[which_data])
+    optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]}'
     return {'optimizer': optimizer, 'tag': optimizer_tag}
 
 
