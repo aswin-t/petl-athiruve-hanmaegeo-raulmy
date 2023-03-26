@@ -1,6 +1,7 @@
 import abc
 import copy
 import warnings
+import random
 import numpy as np
 import tensorflow as tf
 from typing import Optional, Union, Tuple
@@ -10,8 +11,8 @@ from transformers.modeling_tf_utils import unpack_inputs, keras_serializable
 from transformers.utils import ContextManagers
 from transformers.modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput, \
     TFBaseModelOutputWithPastAndCrossAttentions
-from utils.metric import SelectiveSparseTopKCategoricalAccuracy
 from utils import constants
+from utils.metric import SelectiveSparseTopKCategoricalAccuracy
 
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
@@ -82,18 +83,8 @@ class BatchLossCallback(tf.keras.callbacks.Callback):
     def on_train_begin(self, logs=None):
         self.logger.info("learning_rate,loss,accuracy")
 
-    def on_train_end(self, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
     def on_epoch_begin(self, epoch, logs=None):
         self._current_epoch = epoch
-
-    def on_epoch_end(self, epoch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
 
     def on_train_batch_begin(self, batch, logs=None):
         self._current_steps = -1 if self._current_steps is None else self._current_steps
@@ -128,29 +119,6 @@ class PromptCallback(tf.keras.callbacks.Callback):
         self.best_is_lower = best_is_lower
         self._current_epoch = None
 
-    def on_train_begin(self, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_train_end(self, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_epoch_begin(self, epoch, logs=None):
-        self._current_epoch = epoch
-
-    def on_epoch_end(self, epoch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_test_begin(self, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
     def on_test_end(self, logs=None):
         # When it is the first time then use the current value
         self.cur_best = logs[self.monitor] if self.cur_best is None else self.cur_best
@@ -171,45 +139,8 @@ class PromptCallback(tf.keras.callbacks.Callback):
             filen = self.filepath + f'-e{self._current_epoch}-v{logs[self.monitor]:.03f}'
             self.model.save_prompt(filen)
 
-    def on_predict_begin(self, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_predict_end(self, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_train_batch_begin(self, batch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_train_batch_end(self, batch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_test_batch_begin(self, batch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_test_batch_end(self, batch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_predict_batch_begin(self, batch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
-
-    def on_predict_batch_end(self, batch, logs=None):
-        keys = list(logs.keys())
-        if keys:
-            pass
+    def on_epoch_begin(self, epoch, logs=None):
+        self._current_epoch = epoch
 
 
 class PromptDenseLayer(tf.keras.layers.Layer):
@@ -230,11 +161,13 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         """
 
         # Create a prompt that
+        initializer = tf.keras.initializers.RandomUniform(minval=-0.5, maxval=0.5)
         self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
-                                           initializer="glorot_normal")
+                                           initializer=initializer)
 
         # This is added at the end to let super*() know that build is complete
         super().build(input_shape)
+        tf.print('Building prompt weights')
 
     def call(self, input_embeds, *args, **kwargs):
         """
@@ -257,10 +190,18 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         scaled = tf.tensordot(ones_array, self.soft_prompt, axes=[[], []])
 
         # Now concat the input embedding to the output embeddings
-        input_embeds = tf.concat((scaled, input_embeds), axis=1)
+        # input_embeds = tf.concat((scaled, input_embeds), axis=1)
+        # return input_embeds[:, :-self.num_tokens, :]
 
-        # TODO athiruve - What about the end of sequence?
-        return input_embeds[:, :-self.num_tokens, :]
+        # Replace the first 'n' embedding with our trainable one
+        in_shape = tf.shape(input_embeds)
+        input_embeds = tf.concat((scaled, input_embeds[:, self.num_tokens:, :]), axis=1)
+
+        # This is an artifact of how the model is initialized
+        if tf.shape(input_embeds)[1] > in_shape[1]:
+            input_embeds = input_embeds[:, :in_shape[1], :]
+
+        return input_embeds
 
     def compute_output_shape(self, input_shape):
         """
@@ -366,6 +307,16 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
                 inputs_embeds = self.embed_tokens(input_ids)
                 if not self.is_decoder:
                     inputs_embeds = self.prompt(inputs_embeds)
+
+                # # Do not need this anymore as we are geeting rid of the earlier words
+                # # The attention mask needs to be extended to make this work
+                # if attention_mask is not None:
+                #     before = tf.reduce_sum(attention_mask[0])
+                #     attention_mask = tf.concat(
+                #         (tf.ones((tf.shape(attention_mask)[0], constants.NUM_SOFT_TOKENS),
+                #                  dtype=attention_mask.dtype), attention_mask),
+                #         axis=1)[:, :-constants.NUM_SOFT_TOKENS]
+                #     tf.print(before, tf.reduce_sum(attention_mask[0]))
 
         batch_size, seq_length = input_shape
 
@@ -681,6 +632,8 @@ class TFPromptT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageMo
             logits = self.lm_head(sequence_output)
 
         logits = tf.cast(logits, tf.float32)
+        # if labels is not None and logits is not None:
+        #     tf.print(tf.shape(labels), tf.shape(logits))
 
         loss = None if labels is None else self.hf_compute_loss(labels, logits)
 
@@ -821,6 +774,10 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         # Get the current learning rate
         # noinspection PyProtectedMember
         lr = 0.0
+
+        # TODO - athiruve
+        # tf.print(y[0, :], tf.math.argmax(logits, axis=-1)[0, :])
+
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, logits)
         metrics = {m.name: m.result() for m in self.metrics}
@@ -838,16 +795,18 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         """
 
         x = data
+
         y = x["labels"]
         output = self(x, training=False)
 
-        # tf.Gradient.Tape() is not set here as we do dont want gradient calculations
+        # tf.Gradient.Tape() is not set here as we don't want gradient calculations
         loss = output[0]
         loss = tf.reduce_mean(loss)
         logits = output[1]
 
         # Track the loss here
         self.loss_tracker.update_state(loss)
+
         self.compiled_metrics.update_state(y, logits)
         return {m.name: m.result() for m in self.metrics}
 
@@ -868,13 +827,13 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         filen = filepath + '.npy'
         np.save(filen, wandb[0])
 
-        return True
+        return wandb
 
-    def load_prompt(self, filepath):
+    def load_prompt(self, filepath_or_ndarray):
         """
         Save the prompts as numpy files
         Args:
-            filepath: Filename with path -weights.npy and -biases.npy will be added to filename
+            filepath_or_ndarray: Filename with path -weights.npy and -biases.npy will be added to filename
 
         Returns:
 
@@ -882,10 +841,12 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
 
         # Get the weights and biases of this layer
         wandb = []
-
-        # Save the weights
-        filen = filepath + '.npy'
-        wandb.append(np.load(filen))
+        if isinstance(filepath_or_ndarray, np.ndarray):
+            wandb.append(filepath_or_ndarray)
+        else:
+            # Save the weights
+            filen = filepath_or_ndarray
+            wandb.append(np.load(filen))
 
         # Load the weights into arrays
         self.encoder.prompt.set_weights(wandb)
@@ -893,7 +854,7 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
         return True
 
 
-class FullFineTune(TFT5ForConditionalGeneration):
+class FullFineTune(TFT5ForConditionalGeneration, abc.ABC):
     def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
         if log_dir or cache_dir:
             pass
@@ -1009,7 +970,45 @@ def _model_structure_to_dlog(logger, model):
         logger.info(strng)
 
 
-def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint_file: str = ''):
+def _create_and_load_prompt(tokenizer, led):
+    """
+
+    Args:
+        tokenizer: Object of model tokenizer for finding interesting words
+        led: The label encoder decode object
+
+    Returns:
+
+    """
+
+    answers = [v for v in led.lookup.values() if v != 'test']
+    vocab = list(tokenizer.get_vocab().keys())
+    random.shuffle(vocab)
+
+    tokens = tokenizer(answers)
+
+    # Remove the end of sequence token
+    label_tokens = [token[:-1] for token in tokens['input_ids']]
+    cur_tokens = np.sum([len(x) for x in label_tokens])
+
+    # These many more tokens are required
+    tokens_to_generate = constants.NUM_SOFT_TOKENS - cur_tokens
+
+    if tokens_to_generate > 0:
+        this_vocab = [tokenizer(x)['input_ids'][:-1] for x in vocab[:2 * tokens_to_generate]]
+        this_vocab = [x for x in this_vocab if len(x) == 1][:tokens_to_generate]
+    else:
+        this_vocab = []
+
+    # A britle solution for making the tokens fit the desired length
+    all_tokens = []
+    for token in this_vocab + label_tokens:
+        all_tokens += token
+
+    return all_tokens
+
+
+def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint_file: str = '', dprep=None, led=None):
     """
 
     Args:
@@ -1020,6 +1019,9 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         debug: If debug is True then model is run in eager model otherwise in graph mode
         logger: Logger for logging progress
         checkpoint_file: File to load checkpoint, if available
+        dprep: Data preparatio object
+        led: Label encode/decode object
+
     Returns:
     """
 
@@ -1030,9 +1032,15 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
     if which_model in ["PETLSoftPrompt", "PETLSoftPromptTransfer"]:
         logger.info(f'Loading {which_model} model')
         # Create a model instance
-        model = PETLSoftPrompt.from_pretrained(checkpoint)
+        model = PETLSoftPrompt.from_pretrained(checkpoint.replace('_-_', '/'), from_pt=False)
         if checkpoint_file:
             model.load_prompt(checkpoint_file)
+        else:
+            # if the model is a soft prompt model then it could benefit from an initialization
+            tokens = _create_and_load_prompt(dprep.tokenizer, led)
+            # Prompt embeddings
+            prompts = model.shared(tf.convert_to_tensor(tokens, dtype='int32')).numpy()
+            model.load_prompt(prompts)
 
         # This makes the embedding layer non-trainable
         # The layer is called shared because it is shared between the encoder and decoder
@@ -1044,14 +1052,21 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         model.encoder.final_layer_norm.trainable = False
 
         # We don't want any trainable parameters in the decode layer
-        model.layers[2].trainable = False
+        model.decoder.trainable = False
+
+        # We don't want any trainable parameters in the decode layer
+        try:
+            model.lm_head.trainable = False
+        except AttributeError:
+            pass
+
         _model_structure_to_dlog(logger, model)
 
     elif which_model == "FullFineTune":
         logger.info(f'Loading FullFineTune model')
 
         # Create a model instance
-        model = FullFineTune.from_pretrained(checkpoint)
+        model = FullFineTune.from_pretrained(checkpoint.replace('_-_', '/'), from_pt=False)
         if checkpoint_file:
             model.load_weights(checkpoint_file, by_name=True, skip_mismatch=True)
 
@@ -1063,5 +1078,7 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
     # Compile the model with Categorical accuracy metric
     model.compile(optimizer=optimizer,
                   metrics=SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1),
+                  # metrics=tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
+                  loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),
                   run_eagerly=debug)
     return model

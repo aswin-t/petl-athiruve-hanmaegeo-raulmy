@@ -39,7 +39,7 @@ def run_model(benchmark, model_config: dict, optimizer_lrs: dict, checkpoint_fil
     logger = create_logger(checkpoint_filepath, filename=f'{prefix}-{model_checkpoint}-{which_model}-benchmark.log')
     logger.info(f'Performing {benchmark} tuning')
 
-    #  Run the superglue benchmnark
+    #  Run the superglue benchmark
     run_benchmark(logger, model_config=model_config, optimizer_lrs=optimizer_lrs, batch_size=batch_size,
                   cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark=benchmark,
                   one_task=None, prefix=prefix)
@@ -103,7 +103,6 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
     """
 
     which_model = 'soft'
-
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
@@ -132,54 +131,9 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
               prefix='athiruve', batch_size=batch_size, checkpoint_filepath=checkpoint_filepath)
 
 
-def run_spt(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, benchmark='target',
-            epochs=30, gpu=0):
-    """
-
-    Args:
-        model_checkpoint: t5-small, t5-base
-        max_batch_size: Maximum batch size
-        min_num_batches: Minimum number of batches
-        benchmark: glue, super_glue, target
-        epochs: Number of training epochs
-        gpu: Which GPU to use
-
-    Returns:
-
-    """
-
-    which_model = 'spt'
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
-
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': epochs}
-    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
-
-    # Ensure at least 50 batches
-    tasks = Tasks()['target']
-    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches)) for task in tasks}
-
-    for source_task in Tasks()['source']:
-        # Benchmark of target signifies target tasks
-        # Learning rate on log scale
-        try:
-            all_tasks_tag = model_checkpoint + '-' + which_model + '-' + "".join(f"{x}-" for x in source_task)
-            filepath = os.path.join(checkpoint_filepath, 'optimizer/lro-' + all_tasks_tag + '.p')
-            with open(filepath, 'rb') as infi:
-                optimizer_lrs = pickle.load(infi)
-        except FileNotFoundError:
-            raise FileNotFoundError('Was optimization run to get learning rates?')
-
-        # Scale the learning rate by the number of epochs * number of batches per epoch
-        optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
-
-        # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
-        run_model(benchmark=benchmark, model_config=model_config, optimizer_lrs=optimizer_lrs, debug=False,
-                  prefix='athiruve', batch_size=batch_size, checkpoint_filepath=checkpoint_filepath)
-
-
 if __name__ == '__main__':
+    # soft_experiment(benchmark='target', gpu=0, epochs=30)
     # run_fft()
-    run_soft(benchmark='glue', gpu=0, epochs=30)
-
+    model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
+    run_soft(benchmark='target', gpu=0, epochs=1, model_checkpoint=model_checkpoint_, max_batch_size=25)
     # run_soft(benchmark='super_glue', gpu=1, epochs=30)

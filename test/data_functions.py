@@ -20,7 +20,9 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
              ('unacceptable', 'acceptable'), ('equivalent', 'not_equivalent'),
              ('duplicate', 'not_duplicate'), ('entailment', 'not_entailment', 'contradiction'),
              ('absolutely positive', 'terribly negative'),
-             ('absolute truth', 'terrible lie')
+             ('absolute truth', 'terrible lie'),
+             ('follow', 'neutral', 'contradiction'),
+             ('similar', 'different')
              ]
 
     for pair in pairs:
@@ -28,7 +30,7 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
         print(tokens)
         lengths = [len(x) for x in tokens]
         max_ = max(lengths)
-        print(pair, max_)
+        print(pair, max_, lengths)
 
 
 def text_encode_and_save():
@@ -53,6 +55,5 @@ def text_encode_and_save():
 
 
 if __name__ == '__main__':
-    # check_tokenizer_lengths(checkpoint='t5-small')
+    # check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
     text_encode_and_save()
-
