@@ -37,7 +37,7 @@ def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, o
     result = run_lr_split(logger, model_config=model_config, optimizer_algo=optimizer_algo,
                           which_data=which_data, batch_size=batch_size, cache_path=cache_path,
                           checkpoint_filepath=output_path, debug=debug,
-                          prefix=prefix, force_rerun=True)
+                          prefix=prefix, force_run=True)
 
     return result
 
@@ -69,7 +69,7 @@ def run_one_spt(logger, model_checkpoint, which_data, source_config, optimizer_a
     result = run_lr_split(logger, model_config=model_config, optimizer_algo=optimizer_algo,
                           which_data=which_data, batch_size=batch_size, cache_path=cache_path,
                           checkpoint_filepath=output_path, debug=debug,
-                          prefix=prefix, force_rerun=True)
+                          prefix=prefix, force_run=True)
 
     return result
 
@@ -205,7 +205,12 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
     """
 
     # Ensure at least 50 batches
-    tasks = Tasks()[benchmark]
+    if isinstance(benchmark, str):
+        tasks = Tasks()[benchmark]
+        bm_str = benchmark
+    else:
+        tasks = benchmark
+        bm_str = ''.join(f"{x}-" for x in benchmark)
     batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches)) for task in tasks}
 
     output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
@@ -216,7 +221,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
     logger = create_logger(output_path, filename=f'optimizer_experiments-soft.log')
 
     # Learning rate on log scale
-    all_tasks_tag = model_checkpoint + '-' + which_model + '-' + benchmark
+    all_tasks_tag = model_checkpoint + '-' + which_model + '-' + bm_str
     filepath_all = os.path.join(output_path, 'lro-data-' + all_tasks_tag + '.p')
 
     # Check if all tasks optimization has been performed in the past
@@ -253,7 +258,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
             results = pickle.load(infi)
 
     # Now analyze the results
-    lrs = analyze_results(results, output_path, lower_range=5E-7, upper_range=10)
+    lrs = analyze_results(results, output_path, lower_range=lower_range, upper_range=upper_range)
     filepath_all = os.path.join(output_path, 'lro-' + all_tasks_tag + '.p')
 
     # If all tasks have completed then just that one file
@@ -329,7 +334,9 @@ def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, 
 
 
 if __name__ == '__main__':
-    get_adamw_lrs(model_checkpoint='t5-small', which_model='soft', benchmark='super_glue', max_batch_size=100,
+    mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
+    bm = (('glue', 'mrpc'), )
+    get_adamw_lrs(model_checkpoint=mcp, which_model='soft', benchmark=bm, max_batch_size=25,
                   min_num_batches=50, lower_range=5E-7, upper_range=10)
     # for st in Tasks()['source'][: 2]:
     #     ress = get_adamw_spt_lrs('t5-small', 'spt', source_task=st, batch_size=25)
