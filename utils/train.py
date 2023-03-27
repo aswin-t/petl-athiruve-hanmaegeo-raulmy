@@ -7,7 +7,6 @@ import glob
 import time
 import tensorflow as tf
 from typing import Union
-from keras.optimizers.optimizer_experimental.adamw import AdamW
 from utils.constants import Tasks
 from utils.data import PrepDataset
 from utils.metric import evaluate_metric
@@ -296,8 +295,10 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     Returns:
 
     """
-    gc.enable()
+    if force_run:
+        pass
 
+    gc.enable()
     model_config = model_config.copy()
 
     # 1. Get and process inputs
@@ -315,9 +316,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     if prefix:
         tag = prefix + '-' + tag
 
-    # Is there a model that has already been created for this?
-    filen, start_epoch, _ = _load_checkpoint(tag, checkpoint_filepath, epochs, load_best=False,
-                                             force_run=force_run)
+    start_epoch = 0
 
     # Running this evaluation
     logger.info(f'This evaluation tag is {tag}')
@@ -325,17 +324,19 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # 3. Prepare the data
     # Load teh data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
-    tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path)
+    add_taskname = True if official_name == 'FullFineTune' else False
+    tfsplits, splits, counts, led = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
+                                               add_taskname=add_taskname)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # Increase the learning rate linearly within one training epoch
-    learning_scheduler = LinearRampScheduler(initial_learning_rate=1E-7, final_learning_rate=10,
+    learning_scheduler = LinearRampScheduler(initial_learning_rate=1E-7, final_learning_rate=100,
                                              total_steps=int(counts['train'] / batch_size))
     optimizer = optimizer_algo(learning_rate=learning_scheduler)
 
     # 4. Get the model
     # Load the appropriate model
-    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen)
+    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, '', dprep, led)
     if prompt_model_checkpoint:
         prompt_official_name = get_model_official_name(prompt_which_model)
         prompt_checkpoint_filepath = os.path.join(checkpoint_filepath, "..")
@@ -522,8 +523,14 @@ def get_optimizer(optimizer_lrs, which_data):
 
     """
 
-    optimizer = AdamW(optimizer_lrs[which_data])
-    optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]}'
+    try:
+        # This is as per the paper
+        optimizer = tf.keras.optimizers.Adafactor(optimizer_lrs[which_data], weight_decay=1E-5, beta_2_decay=0.8,
+                                                  )
+        optimizer_tag = f'adafactor-learning_rate-{optimizer_lrs[which_data]}'
+    except AttributeError:
+        optimizer = tf.keras.optimizers.experimental.AdamW(optimizer_lrs[which_data])
+        optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]}'
     return {'optimizer': optimizer, 'tag': optimizer_tag}
 
 

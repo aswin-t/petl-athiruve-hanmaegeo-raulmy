@@ -335,15 +335,6 @@ def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    bm = (('glue', 'mrpc'), )
+    bm = (('super_glue', 'cb'), )
     get_adamw_lrs(model_checkpoint=mcp, which_model='soft', benchmark=bm, max_batch_size=25,
                   min_num_batches=50, lower_range=5E-7, upper_range=10)
-    # for st in Tasks()['source'][: 2]:
-    #     ress = get_adamw_spt_lrs('t5-small', 'spt', source_task=st, batch_size=25)
-    #     print(ress)
-    # get_adamw_lrs(model_checkpoint='t5-small', which_model='fft', benchmark='target', max_batch_size=100,
-    #               min_num_batches=50)
-    # get_adamw_lrs(model_checkpoint='t5-small', which_model='soft', benchmark='super_glue', batch_size=10)
-    # source_config_ = {'model_checkpoint': 't5-small', 'which_model': 'soft', 'which_data': ('super_glue', 'boolq')}
-    # ress = get_adamw_spt_lrs('t5-small', 'spt', source_config_, batch_size=100)
-    # print(ress)

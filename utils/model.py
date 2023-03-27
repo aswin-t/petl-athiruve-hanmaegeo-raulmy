@@ -17,6 +17,7 @@ from utils.metric import SelectiveSparseTopKCategoricalAccuracy
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
 `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
+`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.Adam
 If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = tf.ones((num_layers,
 num_heads))`.
 """
@@ -1027,7 +1028,10 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
 
     if optimizer is None:
         params = {"learning_rate": 0.001}
-        optimizer = tf.keras.optimizers.Adam(**params)
+        try:
+            optimizer = tf.keras.optimizers.Adafactor(**params)
+        except AttributeError:
+            optimizer = tf.keras.optimizers.experimental.AdamW(**params)
 
     if which_model in ["PETLSoftPrompt", "PETLSoftPromptTransfer"]:
         logger.info(f'Loading {which_model} model')
