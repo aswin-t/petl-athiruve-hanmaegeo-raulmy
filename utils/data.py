@@ -577,12 +577,13 @@ class PrepDataset:
         return {'question': new_example}
 
     @staticmethod
-    def tokenize(tokenizer, is_test, example):
+    def tokenize(tokenizer, is_test, is_fft, example):
         """
         Our objective is not only to tokenize the input but also to ensure that the after soft prompt is included, the
         embeddings that are removed are all paddings only
 
         Args:
+            is_fft:
             tokenizer: Instance of Autotokenizer initialized appropriately for the checkpoint
             is_test: Whether this is a test set we are working with
             example: Example to be tokenized
@@ -596,7 +597,8 @@ class PrepDataset:
             text += '.'
 
         # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
-        encoder_inputs = tokenizer(text, truncation=True, max_length=constants.ENCODER_MAX_LEN, padding="max_length",
+        encode_length = constants.ENCODER_MAX_LEN if is_fft else constants.ENCODER_MAX_LEN + constants.NUM_SOFT_TOKENS
+        encoder_inputs = tokenizer(text, truncation=True, max_length=encode_length, padding="max_length",
                                    return_tensors="tf")
 
         if is_test:
@@ -606,8 +608,7 @@ class PrepDataset:
             tmp = str(example['answer']).lower()
         else:
             tmp = str(example['answer'])
-        decoder_inputs = \
-            tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN)['input_ids']
+        decoder_inputs = tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN)['input_ids']
 
         # Set up to return
         input_ids = encoder_inputs['input_ids'][0]
@@ -621,7 +622,7 @@ class PrepDataset:
         return {'input_ids': input_ids, 'attention_mask': input_attention, 'labels': target_ids,
                 'decoder_attention_mask': target_attention}
 
-    def encode_and_save(self, which: Union[str, tuple] = 'squad', cache_path: str = None, add_taskname: bool = False):
+    def encode_and_save(self, which: Union[str, tuple] = 'squad', cache_path: str = None, is_fft: bool = False):
         """
 
         Returns:
@@ -633,13 +634,13 @@ class PrepDataset:
 
         # Encode it into a question answer format
         # It also set the value for teh DECODE_MAX_LENGTH based on the answer type
-        encoder, led = self._get_encode(which, add_taskname=add_taskname)
+        encoder, led = self._get_encode(which, add_taskname=is_fft)
         self.logger.info(f'Using function {encoder} with answer lookup {led.lookup}')
 
         which_str = ''.join(f'{x}-' for x in which)
         foldername = which_str
 
-        sub_folder = 'processed/notn' if not add_taskname else 'processed/withtn'
+        sub_folder = 'processed/not_fft' if not is_fft else 'processed/is_fft'
         processed_save_path = os.path.join(cache_path, sub_folder)
 
         if not os.path.exists(os.path.join(processed_save_path, f"{foldername}/val.csv")):
@@ -682,7 +683,7 @@ class PrepDataset:
         return led
 
     def load_to_memory(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
-                       add_taskname: bool = False):
+                       is_fft: bool = False):
         """
 
         Returns:
@@ -696,7 +697,7 @@ class PrepDataset:
         which_str = ''.join(f'{x}-' for x in which)
         foldername = which_str
 
-        sub_folder = 'processed/notn' if not add_taskname else 'processed/withtn'
+        sub_folder = 'processed/not_fft' if not is_fft else 'processed/is_fft'
         processed_save_path = os.path.join(cache_path, sub_folder)
 
         # Load the dataset from CSV
@@ -705,7 +706,7 @@ class PrepDataset:
         counts = {}
 
         # Create a partial function with tokenize.
-        tokenize = partial(self.tokenize, self.tokenizer, False)
+        tokenize = partial(self.tokenize, self.tokenizer, False, is_fft)
         for split in ['train', 'val']:
             # Load the data from CSV and tokenize
             splits[split] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/{split}.csv"),
@@ -731,7 +732,7 @@ class PrepDataset:
         return tfsplits, splits, counts
 
     def load(self, which: Union[str, tuple], batch_size: int = 10, as_batches: bool = False, cache_path: str = None,
-             add_taskname: bool = False):
+             is_fft: bool = False):
         """
 
         Args:
@@ -739,17 +740,16 @@ class PrepDataset:
             as_batches: Return as batches
             batch_size: Size of each batch
             cache_path: Location to save/load cached files
-            add_taskname: Add taskname to task
+            is_fft: Add taskname to task
         Returns:
 
         """
 
         # Ensure the dataset exists and is processed
-        led = self.encode_and_save(which, cache_path, add_taskname=add_taskname)
+        led = self.encode_and_save(which, cache_path, is_fft=is_fft)
 
         if as_batches:
             raise NotImplementedError('Loading as batches is not implemented')
         else:
-            tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path, add_taskname=add_taskname)
-
+            tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path, is_fft=is_fft)
         return tfsplits, splits, counts, led

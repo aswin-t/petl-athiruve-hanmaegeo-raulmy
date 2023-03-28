@@ -324,9 +324,9 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # 3. Prepare the data
     # Load teh data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
-    add_taskname = True if official_name == 'FullFineTune' else False
+    is_fft = True if official_name == 'FullFineTune' else False
     tfsplits, splits, counts, led = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                               add_taskname=add_taskname)
+                                               is_fft=is_fft)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # Increase the learning rate linearly within one training epoch
@@ -440,9 +440,9 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     # 3. Prepare the data
     # Load the data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
-    add_taskname = True if official_name == 'FullFineTune' else False
+    is_fft = True if official_name == 'FullFineTune' else False
     tfsplits, splits, counts, led = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                               add_taskname=add_taskname)
+                                               is_fft=is_fft)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # 4. Get the model

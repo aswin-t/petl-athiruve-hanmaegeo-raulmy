@@ -39,10 +39,9 @@ class LinearRampScheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
         self.final_learning_rate_ = final_learning_rate
         self.total_steps_ = total_steps
 
-        self.learning_rates = tf.convert_to_tensor((
-                                                           10 ** np.linspace(np.log10(initial_learning_rate),
-                                                                             np.log10(final_learning_rate),
-                                                                             total_steps)).tolist(), dtype='float32')
+        self.learning_rates = tf.convert_to_tensor((10 ** np.linspace(np.log10(initial_learning_rate),
+                                                                      np.log10(final_learning_rate),
+                                                                      total_steps)).tolist(), dtype='float32')
         self.total_steps = tf.constant(int(total_steps), dtype='int32')
         self.final_learning_rate = tf.constant(final_learning_rate, dtype='float32')
         self.learning_rate = None
@@ -150,6 +149,7 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_tokens = constants.NUM_SOFT_TOKENS
         self.soft_prompt = None
+        self.initialized = False
 
     def build(self, input_shape):
         """
@@ -161,14 +161,18 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
         """
 
-        # Create a prompt that
-        initializer = tf.keras.initializers.RandomUniform(minval=-0.5, maxval=0.5)
-        self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
-                                           initializer=initializer)
+        if not self.initialized:
+            # Create a prompt that
+            initializer = tf.keras.initializers.RandomUniform(minval=-0.5, maxval=0.5)
+            self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
+                                               initializer=initializer)
+            tf.print('Initializing prompt weights')
+        else:
+            # The weights were already initialized
+            tf.print('Prompt weights were already initialized')
 
         # This is added at the end to let super*() know that build is complete
         super().build(input_shape)
-        tf.print('Building prompt weights')
 
     def call(self, input_embeds, *args, **kwargs):
         """
@@ -182,6 +186,8 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
         """
 
+        # debug = False
+
         # This scales the prompt to the input batch size
         # 1. create an ones array of batch size (batch_size, )
         ones_array = tf.ones((tf.shape(input_embeds)[0],), dtype=self.dtype)
@@ -190,10 +196,11 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         # Gives the shape (batch_size, num_tokens, model_d)
         scaled = tf.tensordot(ones_array, self.soft_prompt, axes=[[], []])
 
-        # Now concat the input embedding to the output embeddings
-        # input_embeds = tf.concat((scaled, input_embeds), axis=1)
-        # return input_embeds[:, :-self.num_tokens, :]
+        # if debug:
+        #     embed_sum_in_start = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
+        #     embed_sum_in_end = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
 
+        # Now concat the input embedding to the output embeddings
         # Replace the first 'n' embedding with our trainable one
         in_shape = tf.shape(input_embeds)
         input_embeds = tf.concat((scaled, input_embeds[:, self.num_tokens:, :]), axis=1)
@@ -201,6 +208,21 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         # This is an artifact of how the model is initialized
         if tf.shape(input_embeds)[1] > in_shape[1]:
             input_embeds = input_embeds[:, :in_shape[1], :]
+        else:
+            pass
+            # if debug:
+            #     embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
+            #
+            #     tf.print('\nin[0]', embed_sum_in_start[:20], embed_sum_in_start[20:])
+            #     tf.print('out[0]', embed_sum_out[:20], embed_sum_out[20:])
+            #     tf.print('delta[0]', embed_sum_out[:20] - embed_sum_in_start[:20],
+            #              embed_sum_out[20:] - embed_sum_in_start[20:])
+            #
+            #     embed_sum_out = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
+            #     tf.print('\nin[-1]', embed_sum_in_end[:20], embed_sum_in_end[20:])
+            #     tf.print('out[-1]', embed_sum_out[:20], embed_sum_out[20:])
+            #     tf.print('delta[-1]', embed_sum_out[:20] - embed_sum_in_end[:20],
+            #              embed_sum_out[20:] - embed_sum_in_end[20:])
 
         return input_embeds
 
@@ -308,16 +330,6 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
                 inputs_embeds = self.embed_tokens(input_ids)
                 if not self.is_decoder:
                     inputs_embeds = self.prompt(inputs_embeds)
-
-                # # Do not need this anymore as we are geeting rid of the earlier words
-                # # The attention mask needs to be extended to make this work
-                # if attention_mask is not None:
-                #     before = tf.reduce_sum(attention_mask[0])
-                #     attention_mask = tf.concat(
-                #         (tf.ones((tf.shape(attention_mask)[0], constants.NUM_SOFT_TOKENS),
-                #                  dtype=attention_mask.dtype), attention_mask),
-                #         axis=1)[:, :-constants.NUM_SOFT_TOKENS]
-                #     tf.print(before, tf.reduce_sum(attention_mask[0]))
 
         batch_size, seq_length = input_shape
 
@@ -477,7 +489,7 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
             )
 
 
-class TFPromptT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss):
+class TFPromptT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss, abc.ABC):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
@@ -886,7 +898,7 @@ class FullFineTune(TFT5ForConditionalGeneration, abc.ABC):
             # There must be a __call__ method that has the forward pass
             outputs = self(x, training=True)
 
-            # The calculated loss and the
+            # The calculated loss
             loss = outputs[0]
             logits = outputs[1]
 

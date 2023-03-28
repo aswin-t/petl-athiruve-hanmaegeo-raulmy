@@ -7,49 +7,9 @@ from utils import constants
 from utils.constants import Tasks
 from utils.data import PrepDataset
 from utils.log import create_logger
-from utils.train import run_one_split, run_lr_split, get_optimizer
+from utils.train import run_one_split, get_optimizer
 
 os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
-
-
-def run_few(model_checkpoint, which_model, optimizer_algo, output_path):
-    """
-    Run a few tasks and return results
-    Args:
-        model_checkpoint: Model checkpoint to use
-        which_model: 'fft' or 'soft'
-        optimizer_algo: Parameters for the optimizer
-        output_path:
-
-    Returns:
-
-    """
-    if 'small' in model_checkpoint:
-        batch_size = 100
-    else:
-        batch_size = 25
-    debug = False
-    tasks = [('super_glue', 'multirc'), ('super_glue', 'rte'), ('glue', 'cola'), ('glue', 'qnli')]
-    prefix = 'optimizer'
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 1}
-
-    cache_path = os.path.join(os.path.dirname(__file__), "../cache")
-
-    # Create a log object
-    logger = create_logger(output_path, filename=f'optimizer_experiments.log')
-
-    # Run one experiment and log all results
-    # If it fails then carry on
-    results = []
-    for task in tasks:
-        result = run_lr_split(logger, model_config=model_config, optimizer_algo=optimizer_algo,
-                              which_data=task, batch_size=batch_size, cache_path=cache_path,
-                              checkpoint_filepath=output_path, debug=debug,
-                              prefix=prefix, force_run=True)
-
-        results.append(result)
-
-    return results
 
 
 def get_training_samples(model_checkpoint):
@@ -89,8 +49,7 @@ def token():
     print(tokenizer.decode(out_tokens.numpy().reshape(-1, ), skip_special_tokens=False))
 
 
-def soft_experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, benchmark='glue', epochs=30,
-                    gpu=0):
+def experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, benchmark='glue', epochs=30, gpu=0):
     """
 
     Args:
@@ -104,7 +63,7 @@ def soft_experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_bat
     Returns:
     """
     prefix = 'experiment'
-    which_model = 'fft'
+    which_model = 'soft'
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
@@ -120,13 +79,9 @@ def soft_experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_bat
     logger.info(f'Performing {benchmark} tuning')
 
     # Ensure at least 50 batches
-    # task = ('super_glue', 'rte')
-    # task = ('super_glue', 'multirc')
     task = ('super_glue', 'boolq')
     batch_size = {task: min(max_batch_size, int(constants.COUNTS[task]/min_num_batches))}
-
-    # for lr in [1E-7, 1E-6, 3E-6, 1E-5, 1E-4, 1E-3, 1E-3, 1E-1, 1, 10]:
-    for lr in [1E-2, ]:
+    for lr in [0.05, ]:
         # Get the batch size
         # Run one experiment and log all results
         # If it fails then carry on
@@ -138,12 +93,5 @@ def soft_experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_bat
 
 
 if __name__ == '__main__':
-    # mcp = 'liangtaiwan/t5-v1_1-lm100k-base'.replace('/', '_-_')
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    # mcp = 't5-base'.replace('/', '_-_')
-    soft_experiment(model_checkpoint=mcp, max_batch_size=25, min_num_batches=50, benchmark='glue', epochs=100, gpu=0)
-    # ress = optimizer_checks('t5-small', 'fft')
-    # analyze_results(ress)
-    # analyze_all(ress)
-    # print(os.getcwd())
-    # token()
+    experiment(model_checkpoint=mcp, max_batch_size=32, min_num_batches=50, benchmark='glue', epochs=100, gpu=0)

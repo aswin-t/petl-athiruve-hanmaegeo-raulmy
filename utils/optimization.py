@@ -92,7 +92,7 @@ def _fine_tuning_lr(x_, loss, der, idx):
     der = der[:idx + 1]
 
     # Index the lr lower than 0
-    idx = (der.shape[0] - np.sum(np.flip(der) < 0)) - 1
+    idx = np.where(der > np.min(der)/100)[0][-1]
     der = der[idx + 1:]
     x_ = x_[idx + 1:]
     loss = loss[idx + 1:]
@@ -210,7 +210,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
         bm_str = benchmark
     else:
         tasks = benchmark
-        bm_str = ''.join(f"{x}-" for x in benchmark)
+        bm_str = ''.join(f"{x}-" for x in benchmark[0])
     batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches)) for task in tasks}
 
     output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
@@ -335,6 +335,6 @@ def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    bm = (('super_glue', 'cb'), )
+    bm = (('super_glue', 'boolq'), )
     get_adamw_lrs(model_checkpoint=mcp, which_model='soft', benchmark=bm, max_batch_size=25,
                   min_num_batches=50, lower_range=5E-7, upper_range=10)

@@ -120,11 +120,12 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
         filepath = os.path.join(checkpoint_filepath, 'optimizer/lro-' + all_tasks_tag + '.p')
         with open(filepath, 'rb') as infi:
             optimizer_lrs = pickle.load(infi)
-    except FileNotFoundError:
-        raise FileNotFoundError('Was optimization run to get learning rates?')
 
-    # Scale the learning rate by the number of epochs * number of batches per epoch
-    optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
+        # Scale the learning rate by the number of epochs * number of batches per epoch
+        optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
+    except FileNotFoundError:
+        optimizer_lrs = {task: 0.3 for task in tasks}
+        # raise FileNotFoundError('Was optimization run to get learning rates?')
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_lrs=optimizer_lrs, debug=False,
@@ -132,8 +133,6 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
 
 
 if __name__ == '__main__':
-    # soft_experiment(benchmark='target', gpu=0, epochs=30)
-    # run_fft()
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    run_soft(benchmark='target', gpu=0, epochs=1, model_checkpoint=model_checkpoint_, max_batch_size=25)
-    # run_soft(benchmark='super_glue', gpu=1, epochs=30)
+    # run_soft(benchmark='super_glue', gpu=0, epochs=200, model_checkpoint=model_checkpoint_, max_batch_size=32)
+    run_soft(benchmark='super_glue', gpu=0, epochs=200, model_checkpoint=model_checkpoint_, max_batch_size=32)
