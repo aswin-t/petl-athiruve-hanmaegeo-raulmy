@@ -112,6 +112,7 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
 
     which_model = 'soft'
     target_steps = 30000
+    prefix = 'baseline'
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
@@ -146,9 +147,9 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_lrs=optimizer_lrs, debug=False,
-              prefix='athiruve', batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
+              prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
 
 
 if __name__ == '__main__':
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    run_soft(benchmark='glue', gpu=0, epochs=None, model_checkpoint=model_checkpoint_, max_batch_size=32)
+    run_soft(benchmark='super_glue', gpu=1, epochs=None, model_checkpoint=model_checkpoint_, max_batch_size=32)

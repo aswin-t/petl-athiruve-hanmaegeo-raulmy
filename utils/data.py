@@ -1,6 +1,4 @@
 import os
-import random
-
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -102,6 +100,14 @@ class LabelEncodeDecode:
         else:
             # There is no translation involved
             return inpred
+
+
+def _cleanup_str(strng):
+    strng = strng.rstrip()
+    if strng[-1] != '.':
+        strng += '.'
+
+    return strng
 
 
 class PrepDataset:
@@ -217,14 +223,13 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence1: {first}"
-            question_plus += f" sentence2: {second}"
-
+            first = _cleanup_str(first)
+            second = _cleanup_str(second)
+            question_plus = f"sentence1: {first} sentence2: {second}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
                 question_plus = 'absence ' * constants.NUM_SOFT_TOKENS + question_plus
-
             outputs = {'question': question_plus, 'answer': answer}
             return outputs
         elif led.which[1] in ['axg', 'cb', 'rte']:
@@ -236,8 +241,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"hypothesis: {hypothesis}"
-            question_plus += f" premise: {premise}"
+            hypothesis = _cleanup_str(hypothesis)
+            premise = _cleanup_str(premise)
+            question_plus = f"hypothesis: {hypothesis} premise: {premise}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -248,21 +254,20 @@ class PrepDataset:
             return outputs
         elif led.which[1] == 'boolq':
             # Context for answering the question
-            first = example['question']
-            second = example['passage']
+            question = example['question']
+            passage = example['passage']
 
             # Convert integer to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f" passage: {second}"
-            question_plus += f"question: {first}"
-
+            question = _cleanup_str(question)
+            passage = _cleanup_str(passage)
+            question_plus = f" passage: {passage} question: {question}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
                 question_plus = 'absence ' * constants.NUM_SOFT_TOKENS + question_plus
-
             outputs = {'question': question_plus, 'answer': answer}
             return outputs
         elif led.which[1] == 'copa':
@@ -276,9 +281,10 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
+            question = _cleanup_str(question)
+            premise = _cleanup_str(premise)
             question_plus = f"choice1: {c1} choice2: {c2} "
-            question_plus += f"premise: {premise} "
-            question_plus = f"question: {question}"
+            question_plus += f"premise: {premise} question: {question}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -296,8 +302,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"question: {question} "
-            question_plus += f" paragraph: {para}"
+            question = _cleanup_str(question)
+            para = _cleanup_str(para)
+            question_plus = f"question: {question} paragraph: {para}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -341,9 +348,7 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"hypothesis: {hypothesis} "
-            question_plus += f"premise: {premise}"
-
+            question_plus = f"hypothesis: {hypothesis} premise: {premise}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -361,12 +366,7 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            # question_plus = f"sentence1: {sen1} sentence2: {sen2} word: {word}"
-            # sen1 = sen1.rstrip()
-            # sen2 = sen2.rstrip()
-            # sen1 = f'{sen1}.' if sen1[-1] != '.' else sen1
-            # sen2 = f'{sen2}.' if sen2[-1] != '.' else sen2
-            question_plus = f" {sen1} {sen2} Consider the word {word}"
+            question_plus = f"sentence1: {sen1} sentence2: {sen2} word: {word}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -598,10 +598,7 @@ class PrepDataset:
         Returns:
         """
 
-        # Add a period at the end of the sentence
         text = example['question'].rstrip()
-        if text[-1] != '.':
-            text += '.'
 
         # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
         encode_length = constants.ENCODER_MAX_LEN if is_fft else constants.ENCODER_MAX_LEN + constants.NUM_SOFT_TOKENS

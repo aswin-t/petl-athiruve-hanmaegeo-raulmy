@@ -1,6 +1,8 @@
 import os
 import pickle
+import random
 import tensorflow as tf
+from itertools import product
 from transformers import AutoTokenizer
 from transformers.models.t5 import TFT5ForConditionalGeneration
 from utils import constants
@@ -48,6 +50,35 @@ def token():
     print(tokenizer.decode(out_tokens.numpy().reshape(-1, ), skip_special_tokens=False))
 
 
+def _create_optimizer_experiments(total_steps):
+    """
+
+    Returns:
+    """
+
+    scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts
+    weight_decays = [0, 1E-5, 1E-4, 1E-3]
+    learning_rates = [0.01, 0.03, 0.1, 0.3]
+    do_schedulers = [False, True]
+
+    first_decay_steps = int(total_steps / 3)
+
+    combos = list(product(*[learning_rates, weight_decays, do_schedulers]))
+    random.shuffle(combos)
+
+    out = []
+    for combo in combos:
+        # Get the learning rate
+        if combo[-1]:
+            lr = scheduler(initial_learning_rate=combo[0], first_decay_steps=first_decay_steps, t_mul=2.0)
+        else:
+            lr = combo[0]
+        param = {'learning_rate': lr, 'weight_decay': combo[1]}
+        out.append(param)
+
+    return out
+
+
 def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
                epochs=30, gpu=0, lr=0.3):
     """
@@ -85,14 +116,17 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     # Get the batch size
     # Run one experiment and log all results
     # If it fails then carry on
-    optimizer_lrs = {task: lr}
-    optimizer_params = get_optimizer(optimizer_lrs, which_data=task)
-    run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
-                  batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                  debug=True, prefix=prefix, epochs=epochs)
+    total_steps = int((constants.COUNTS[task] / batch_size[task]) * epochs)
+    optimizer_experiments = _create_optimizer_experiments(total_steps)
+
+    for optimizer_param in optimizer_experiments:
+        optimizer_param_ = get_optimizer(optimizer_param)
+        run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param_, which_data=task,
+                      batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
+                      debug=True, prefix=prefix, epochs=epochs)
 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    experiment(prefix='experiment', model_checkpoint=mcp, max_batch_size=32, min_num_batches=50, task=('glue', 'mrpc'),
-               epochs=300, gpu=0)
+    experiment(prefix='optimization_0', model_checkpoint=mcp, max_batch_size=32, min_num_batches=50,
+               task=('super_glue', 'rte'), epochs=30, gpu=0)

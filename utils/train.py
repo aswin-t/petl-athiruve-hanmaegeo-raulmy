@@ -56,7 +56,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
 
     # Find all filenames that match the current tag
     cur_epoch = -1
-    cur_val = 0
+    cur_val = -1
 
     # Empty filename
     filen = ''
@@ -269,7 +269,23 @@ def _get_config(model_config):
     return model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model
 
 
-def run_lr_split(logger, optimizer_algo, model_config: dict = None,
+def _log_gpu_usage(logger, prefix):
+    """
+
+    Returns:
+
+    """
+
+    # Check the memory devices
+    gpu_devices = tf.config.get_visible_devices('GPU')
+    gpu_usage_str = ""
+    for cnt, _ in enumerate(gpu_devices):
+        usage = tf.config.experimental.get_memory_info(f"GPU:{cnt}")['current']
+        gpu_usage_str += f'GPU: {cnt} Usage: {usage},'
+    logger.info(f"{prefix}: {gpu_usage_str[:-1]}")
+
+
+def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int = 30,
                  which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
                  checkpoint_filepath: str = None, debug: bool = False, prefix='', force_run: bool = False):
     """
@@ -282,7 +298,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
                 'which_model': 'fft' -> full fine-tuning of all parameters.
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
-                'epochs': <Optional>
+        epochs: Number of epochs to run
         which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
@@ -302,7 +318,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
 
     # 1. Get and process inputs
     # Get inputs from model config
-    model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
+    model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
         _get_config(model_config)
     logger.info(f'LR optimization on checkpoint {model_checkpoint} of {prompt_which_model}')
 
@@ -325,7 +341,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
     tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                               is_fft=is_fft)
+                                             is_fft=is_fft)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # Increase the learning rate linearly within one training epoch
@@ -361,22 +377,6 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     _log_gpu_usage(logger, prefix="return")
 
     return copy.deepcopy(model_optimizer_callback.history)
-
-
-def _log_gpu_usage(logger, prefix):
-    """
-
-    Returns:
-
-    """
-
-    # Check the memory devices
-    gpu_devices = tf.config.get_visible_devices('GPU')
-    gpu_usage_str = ""
-    for cnt, _ in enumerate(gpu_devices):
-        usage = tf.config.experimental.get_memory_info(f"GPU:{cnt}")['current']
-        gpu_usage_str += f'GPU: {cnt} Usage: {usage},'
-    logger.info(f"{prefix}: {gpu_usage_str[:-1]}")
 
 
 def run_one_split(logger, model_config: dict = None, optimizer_params=None, epochs: int = 30,
@@ -441,7 +441,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
     tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                               is_fft=is_fft)
+                                             is_fft=is_fft)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # 4. Get the model
@@ -511,12 +511,11 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     return results
 
 
-def get_optimizer(optimizer_lrs, which_data):
+def get_optimizer(optimizer_param):
     """
 
     Args:
-        optimizer_lrs:
-        which_data:
+        optimizer_param:
 
     Returns:
 
@@ -524,19 +523,30 @@ def get_optimizer(optimizer_lrs, which_data):
 
     try:
         # This is as per the paper
-        optimizer = tf.keras.optimizers.Adafactor(optimizer_lrs[which_data], weight_decay=1E-5, beta_2_decay=0.8)
-        optimizer_tag = f'adafactor-learning_rate-{optimizer_lrs[which_data]}'
+        optimizer = tf.keras.optimizers.Adafactor(**optimizer_param)
+        if not isinstance(optimizer_param['learning_rate'], float):
+            lr_str = str(optimizer_param['learning_rate']).split('.')[4].split(' ')[0] + '-'
+            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param['learning_rate'].__dict__.items())
+            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param.items() if k != 'learning_rate')
+        else:
+            lr_str = f"".join(f'{k}-{v}-' for k, v in optimizer_param.items())
+
+        optimizer_tag = f'adafactor-' + lr_str
     except AttributeError:
-        optimizer = tf.keras.optimizers.experimental.AdamW(optimizer_lrs[which_data])
-        optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]}'
-        # optimizer = tf.keras.optimizers.SGD(optimizer_lrs[which_data])
-        # optimizer_tag = f'sgd-learning_rate-{optimizer_lrs[which_data]}'
-        # optimizer = tf.keras.optimizers.Adam(optimizer_lrs[which_data])
-        # optimizer_tag = f'sgd-learning_rate-{optimizer_lrs[which_data]}'
+        optimizer = tf.keras.optimizers.experimental.AdamW(**optimizer_param)
+
+        if not isinstance(optimizer_param['learning_rate'], float):
+            lr_str = str(optimizer_param['learning_rate']).split('.')[4].split(' ')[0] + '-'
+            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param['learning_rate'].__dict__.items())
+            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param.items() if k != 'learning_rate')
+        else:
+            lr_str = f"".join(f'{k}-{v}-' for k, v in optimizer_param.items())
+        optimizer_tag = f'adamw-' + lr_str
+
     return {'optimizer': optimizer, 'tag': optimizer_tag}
 
 
-def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_size: Union[int, dict] = 4,
+def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batch_size: Union[int, dict] = 4,
                   cache_path: str = None, checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue',
                   one_task: str = None, prefix='', epochs: int = 30):
     """
@@ -549,7 +559,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_s
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
         epochs: Number of epochs to run the task
-        optimizer_lrs: Dict with key as which_data as value as learning rate
+        optimizer_params: Dict with key as task and value as optimizer parameters
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
         checkpoint_filepath: Path to store the model checkpoints and log file
@@ -591,7 +601,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_s
                 continue
 
         # Get the optimizer params and then run model
-        optimizer_params = get_optimizer(optimizer_lrs, which_data=task)
+        optimizer_params = get_optimizer(optimizer_params[task])
         try:
             # Get the batch size
             # Run one experiment and log all results

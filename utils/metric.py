@@ -47,7 +47,8 @@ def cleanup_predictions(predictions, references):
                 # Pick any class other than the reference class
                 pred_.append(list(classes.difference({r}))[random.randint(0, len(classes)-2)])
             else:
-                pred_.append(r)
+                # Concatenate prediction
+                pred_.append(p)
         predictions = pred_
 
     return predictions
