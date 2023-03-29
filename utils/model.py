@@ -17,7 +17,7 @@ from utils.metric import SelectiveSparseTopKCategoricalAccuracy
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
 `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
-`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.Adam
+`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
 If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = tf.ones((num_layers,
 num_heads))`.
 """
@@ -92,7 +92,7 @@ class BatchLossCallback(tf.keras.callbacks.Callback):
 
     def on_train_batch_end(self, batch, logs=None):
         # Get configuration from the optimizer
-        lr = self.model.optimizer.lr.numpy()
+        lr = self.model.optimizer.learning_rate(self._current_steps).numpy()
         self.logger.info(f"{lr},{logs['loss']},{logs['accuracy']}")
         self.history['learning_rate'].append(lr)
         self.history['loss'].append(logs['loss'])
@@ -213,14 +213,14 @@ class PromptDenseLayer(tf.keras.layers.Layer):
             # if debug:
             #     embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
             #
-            #     tf.print('\nin[0]', embed_sum_in_start[:20], embed_sum_in_start[20:])
-            #     tf.print('out[0]', embed_sum_out[:20], embed_sum_out[20:])
+            #     tf.print('\nin[0]', embed_sum_in_start[:20], embed_sum_in_start[23:])
+            #     tf.print('out[0]', embed_sum_out[:20], embed_sum_out[23:])
             #     tf.print('delta[0]', embed_sum_out[:20] - embed_sum_in_start[:20],
             #              embed_sum_out[20:] - embed_sum_in_start[20:])
             #
             #     embed_sum_out = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
-            #     tf.print('\nin[-1]', embed_sum_in_end[:20], embed_sum_in_end[20:])
-            #     tf.print('out[-1]', embed_sum_out[:20], embed_sum_out[20:])
+            #     tf.print('\nin[-1]', embed_sum_in_end[:20], embed_sum_in_end[23:])
+            #     tf.print('out[-1]', embed_sum_out[:20], embed_sum_out[23:])
             #     tf.print('delta[-1]', embed_sum_out[:20] - embed_sum_in_end[:20],
             #              embed_sum_out[20:] - embed_sum_in_end[20:])
 
@@ -763,6 +763,9 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
 
         # What does X look like?
         x = data
+        # tf.print('\nx')
+        # tf.print(x['input_ids'][0:2, 22:30])
+
         # Extract the Y as labels
         y = x["labels"]
 
@@ -983,21 +986,18 @@ def _model_structure_to_dlog(logger, model):
         logger.info(strng)
 
 
-def _create_and_load_prompt(tokenizer, led):
+def _create_and_load_prompt(tokenizer, dprep):
     """
 
     Args:
         tokenizer: Object of model tokenizer for finding interesting words
-        led: The label encoder decode object
+        dprep: Dataset preparattion object
 
     Returns:
 
     """
 
-    answers = [v for v in led.lookup.values() if v != 'test']
-    vocab = list(tokenizer.get_vocab().keys())
-    random.shuffle(vocab)
-
+    answers = [v for v in dprep.led.lookup.values() if v != 'test']
     tokens = tokenizer(answers)
 
     # Remove the end of sequence token
@@ -1007,8 +1007,17 @@ def _create_and_load_prompt(tokenizer, led):
     # These many more tokens are required
     tokens_to_generate = constants.NUM_SOFT_TOKENS - cur_tokens
 
+    vocab = copy.copy(dprep.words[:300])
+    random.shuffle(vocab)
+    # These counts are actually probabilities
+    # counts = np.cumsum(dprep.counts)
+    # for i in range(2*tokens_to_generate):
+    #     # Generates a word with the probabaility of occurence
+    #     idx = counts < random.random()
+    #     vocab.append(dprep.words[idx])
+
     if tokens_to_generate > 0:
-        this_vocab = [tokenizer(x)['input_ids'][:-1] for x in vocab[:2 * tokens_to_generate]]
+        this_vocab = [tokenizer(x)['input_ids'][:-1] for x in vocab]
         this_vocab = [x for x in this_vocab if len(x) == 1][:tokens_to_generate]
     else:
         this_vocab = []
@@ -1021,7 +1030,7 @@ def _create_and_load_prompt(tokenizer, led):
     return all_tokens
 
 
-def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint_file: str = '', dprep=None, led=None):
+def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint_file: str = '', dprep=None):
     """
 
     Args:
@@ -1033,7 +1042,6 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         logger: Logger for logging progress
         checkpoint_file: File to load checkpoint, if available
         dprep: Data preparatio object
-        led: Label encode/decode object
 
     Returns:
     """
@@ -1053,7 +1061,7 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
             model.load_prompt(checkpoint_file)
         else:
             # if the model is a soft prompt model then it could benefit from an initialization
-            tokens = _create_and_load_prompt(dprep.tokenizer, led)
+            tokens = _create_and_load_prompt(dprep.tokenizer, dprep)
             # Prompt embeddings
             prompts = model.shared(tf.convert_to_tensor(tokens, dtype='int32')).numpy()
             model.load_prompt(prompts)

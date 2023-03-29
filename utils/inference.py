@@ -1,9 +1,14 @@
 import os
+import tensorflow as tf
 from transformers import T5Tokenizer
 from utils.model import TFT5ForConditionalGeneration
 
 os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
 
+
+gpu = 1
+gpus = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
 mcp = 'google/t5-base-lm-adapt'
 tokenizer = T5Tokenizer.from_pretrained(mcp)

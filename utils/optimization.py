@@ -3,7 +3,9 @@ import pickle
 import numpy as np
 from derivative import dxdt
 import matplotlib.pyplot as plt
+from keras.optimizers import SGD
 from keras.optimizers.optimizer_experimental.adamw import AdamW
+# from keras.optimizers.optimizer_experimental.adafactor import Adafactor
 from utils.log import create_logger
 from utils import constants
 from utils.constants import Tasks
@@ -26,7 +28,7 @@ def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, o
 
     """
 
-    debug = False
+    debug = True
     prefix = 'optimizer'
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 1}
 
@@ -197,77 +199,6 @@ def analyze_results(results, output_path, lower_range=5E-7, upper_range=10):
     return lrs
 
 
-def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, min_num_batches=50,
-                  lower_range=5E-7, upper_range=10):
-    """
-
-    Returns:
-    """
-
-    # Ensure at least 50 batches
-    if isinstance(benchmark, str):
-        tasks = Tasks()[benchmark]
-        bm_str = benchmark
-    else:
-        tasks = benchmark
-        bm_str = ''.join(f"{x}-" for x in benchmark[0])
-    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches)) for task in tasks}
-
-    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
-    os.makedirs(output_path, exist_ok=True)
-    optimizer_algo = AdamW
-
-    # Create a log object
-    logger = create_logger(output_path, filename=f'optimizer_experiments-soft.log')
-
-    # Learning rate on log scale
-    all_tasks_tag = model_checkpoint + '-' + which_model + '-' + bm_str
-    filepath_all = os.path.join(output_path, 'lro-data-' + all_tasks_tag + '.p')
-
-    # Check if all tasks optimization has been performed in the past
-    if not os.path.exists(filepath_all):
-        # If some or all tasks are due
-
-        results = {}
-        for task in tasks:
-            # These are the results for this configuration
-            task_tag = "".join(f"{x}-" for x in task)
-            dict_key = model_checkpoint + '-' + which_model + '-' + task_tag
-            filename = 'lro' + '-' + dict_key + '.p'
-
-            # has this one been run before?
-            filepath = os.path.join(output_path, filename)
-            if not os.path.exists(filepath):
-
-                # Results from running one lr optimization loop
-                result = run_one(logger, model_checkpoint, which_model, task, optimizer_algo, output_path,
-                                 batch_size[task])
-                with open(filepath, 'wb') as outfi:
-                    pickle.dump(result, outfi)
-            else:
-                with open(filepath, 'rb') as infi:
-                    result = pickle.load(infi)
-
-            results[dict_key] = (result, task)
-
-        # If all tasks have completed then just that one file
-        with open(filepath_all, 'wb') as outfi:
-            pickle.dump(results, outfi)
-    else:
-        with open(filepath_all, 'rb') as infi:
-            results = pickle.load(infi)
-
-    # Now analyze the results
-    lrs = analyze_results(results, output_path, lower_range=lower_range, upper_range=upper_range)
-    filepath_all = os.path.join(output_path, 'lro-' + all_tasks_tag + '.p')
-
-    # If all tasks have completed then just that one file
-    with open(filepath_all, 'wb') as outfi:
-        pickle.dump(lrs, outfi)
-
-    return lrs
-
-
 def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, lower_range=5E-7, upper_range=10):
     """
 
@@ -333,8 +264,84 @@ def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, 
     return lrs
 
 
+def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, min_num_batches=50,
+                  lower_range=5E-7, upper_range=10):
+    """
+
+    Returns:
+    """
+
+    # Ensure at least 50 batches
+    if isinstance(benchmark, str):
+        tasks = Tasks()[benchmark]
+        bm_str = benchmark
+    else:
+        tasks = benchmark
+        bm_str = ''.join(f"{x}-" for x in benchmark[0])
+    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches)) for task in tasks}
+
+    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
+    os.makedirs(output_path, exist_ok=True)
+
+    use_adam = False
+    if use_adam:
+        optimizer_algo = AdamW
+    else:
+        optimizer_algo = SGD
+
+    # Create a log object
+    logger = create_logger(output_path, filename=f'optimizer_experiments-soft.log')
+
+    # Learning rate on log scale
+    all_tasks_tag = model_checkpoint + '-' + which_model + '-' + bm_str
+    filepath_all = os.path.join(output_path, 'lro-data-' + all_tasks_tag + '.p')
+
+    # Check if all tasks optimization has been performed in the past
+    if not os.path.exists(filepath_all):
+        # If some or all tasks are due
+
+        results = {}
+        for task in tasks:
+            # These are the results for this configuration
+            task_tag = "".join(f"{x}-" for x in task)
+            dict_key = model_checkpoint + '-' + which_model + '-' + task_tag
+            filename = 'lro' + '-' + dict_key + '.p'
+
+            # has this one been run before?
+            filepath = os.path.join(output_path, filename)
+            if not os.path.exists(filepath):
+
+                # Results from running one lr optimization loop
+                result = run_one(logger, model_checkpoint, which_model, task, optimizer_algo, output_path,
+                                 batch_size[task])
+                with open(filepath, 'wb') as outfi:
+                    pickle.dump(result, outfi)
+            else:
+                with open(filepath, 'rb') as infi:
+                    result = pickle.load(infi)
+
+            results[dict_key] = (result, task)
+
+        # If all tasks have completed then just that one file
+        with open(filepath_all, 'wb') as outfi:
+            pickle.dump(results, outfi)
+    else:
+        with open(filepath_all, 'rb') as infi:
+            results = pickle.load(infi)
+
+    # Now analyze the results
+    lrs = analyze_results(results, output_path, lower_range=lower_range, upper_range=upper_range)
+    filepath_all = os.path.join(output_path, 'lro-' + all_tasks_tag + '.p')
+
+    # If all tasks have completed then just that one file
+    with open(filepath_all, 'wb') as outfi:
+        pickle.dump(lrs, outfi)
+
+    return lrs
+
+
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    bm = (('super_glue', 'boolq'), )
+    bm = (('glue', 'mrpc'), )
     get_adamw_lrs(model_checkpoint=mcp, which_model='soft', benchmark=bm, max_batch_size=25,
-                  min_num_batches=50, lower_range=5E-7, upper_range=10)
+                  min_num_batches=50, lower_range=1E-6, upper_range=10)

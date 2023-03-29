@@ -1,4 +1,6 @@
+import random
 import evaluate
+import numpy as np
 import tensorflow as tf
 from functools import partial
 from transformers import AutoTokenizer
@@ -28,7 +30,22 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
-def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size=100):
+def cleanup_predictions(predictions, references):
+    if np.any(np.array(predictions) == -1):
+        pred_ = []
+        classes = set(references)
+        for p, r in zip(predictions, references):
+            if p == -1:
+                # Pick any class other than the reference class
+                pred_.append(list(classes.difference({r}))[random.randint(0, len(classes)-2)])
+            else:
+                pred_.append(r)
+        predictions = pred_
+
+    return predictions
+
+
+def evaluate_metric(logger, tag, which, checkpoint, model, val_split, is_fft, batch_size=100):
     """
 
     Args:
@@ -39,6 +56,7 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
         checkpoint: Tokenizer to use
         val_split: Validation split
         batch_size: Size of batch to generate results
+        is_fft: Is this a FFt run
     Returns:
 
     """
@@ -46,7 +64,7 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
     # Get the tokenizer for this data
     tokenizer = AutoTokenizer.from_pretrained(checkpoint.replace('_-_', '/'),
                                               model_max_length=constants.ENCODER_MAX_LEN)
-    tokenize = partial(PrepDataset.tokenize, tokenizer, True)
+    tokenize = partial(PrepDataset.tokenize, tokenizer, True, is_fft)
     led = LabelEncodeDecode(which)
 
     if which[0] in ['super_glue', 'glue']:
@@ -70,6 +88,10 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
 
     # The answers are text, now convert the answers back to labels
     predictions = [led[x] for x in text_predictions]
+
+    # For the ones with an answer not in the answer set, replace with opposite of reference
+    # This is to ensure we do not get credit for anything that is not real
+    predictions = cleanup_predictions(predictions, references)
 
     # Log the prediction and the reference
     logger.info('reference,prediction,predict_text')

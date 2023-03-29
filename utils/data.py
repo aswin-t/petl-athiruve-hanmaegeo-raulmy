@@ -1,5 +1,8 @@
 import os
 import random
+
+import numpy as np
+import pandas as pd
 import tensorflow as tf
 from typing import Union
 from functools import partial
@@ -95,10 +98,7 @@ class LabelEncodeDecode:
                     return k
 
             # Did not find the predicted values in the value field
-            keys = list(self.lookup.keys())
-            keys = [x for x in keys if x != -1]
-            random.shuffle(keys)
-            return keys[0]
+            return -1
         else:
             # There is no translation involved
             return inpred
@@ -129,6 +129,9 @@ class PrepDataset:
         self.train_dataset = None
         self.valid_dataset = None
         self.num_proc = num_proc
+        self.words = None
+        self.counts = None
+        self.led = None
 
     def __getstate__(self):
         state = self.__dict__
@@ -358,8 +361,12 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence1: {sen1} sentence2: {sen2} word: {word}"
-
+            # question_plus = f"sentence1: {sen1} sentence2: {sen2} word: {word}"
+            # sen1 = sen1.rstrip()
+            # sen2 = sen2.rstrip()
+            # sen1 = f'{sen1}.' if sen1[-1] != '.' else sen1
+            # sen2 = f'{sen2}.' if sen2[-1] != '.' else sen2
+            question_plus = f" {sen1} {sen2} Consider the word {word}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -682,6 +689,31 @@ class PrepDataset:
 
         return led
 
+    def count_words(self, filepath):
+
+        df = pd.read_csv(filepath)
+        q_list = df.question.to_list()
+        out_list = []
+        for q in q_list:
+            out_list += q.split()
+
+        words, counts = np.unique(out_list, return_counts=True)
+        idx = np.argsort(counts)[-1::-1]
+
+        # Words and counts in descending order
+        words = words[idx]
+        counts = counts[idx]
+
+        # remove absence if it is the most common word
+        if words[0] == 'absence':
+            words = words[1:]
+            counts = counts[1:]
+
+        # Convert counts to probability
+        counts = counts/np.sum(counts)
+        self.words = words
+        self.counts = counts
+
     def load_to_memory(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
                        is_fft: bool = False):
         """
@@ -722,12 +754,7 @@ class PrepDataset:
                 batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
                 shuffle=True)
 
-        try:
-            splits['ftest'] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
-            counts['ftest'] = len(splits['test'])
-        except FileNotFoundError:
-            splits['ftest'] = []
-            counts['ftest'] = 0
+        self.count_words(os.path.join(processed_save_path, f"{foldername}/val.csv"))
 
         return tfsplits, splits, counts
 
@@ -752,4 +779,6 @@ class PrepDataset:
             raise NotImplementedError('Loading as batches is not implemented')
         else:
             tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path, is_fft=is_fft)
+
+        self.led = led
         return tfsplits, splits, counts, led

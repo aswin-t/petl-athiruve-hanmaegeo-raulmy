@@ -252,7 +252,6 @@ def get_model_official_name(which_model):
 def _get_config(model_config):
     model_checkpoint = check_config(model_config, 'model_checkpoint', default=None, required=True)
     which_model = check_config(model_config, 'which_model', default=None, required=True)
-    epochs = check_config(model_config, 'epochs', default=10, required=False)
     prompt_specs = check_config(model_config, 'prompt_transfer', default=None, required=False)
 
     if prompt_specs is not None:
@@ -267,7 +266,7 @@ def _get_config(model_config):
     if model_config:
         raise KeyError(f'Unexpected keys {list(model_config.keys())} in model_config')
 
-    return model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data, prompt_which_model
+    return model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model
 
 
 def run_lr_split(logger, optimizer_algo, model_config: dict = None,
@@ -325,7 +324,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
     # Load teh data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
-    tfsplits, splits, counts, led = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
+    tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
                                                is_fft=is_fft)
     _log_gpu_usage(logger, prefix="Dataset")
 
@@ -336,7 +335,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None,
 
     # 4. Get the model
     # Load the appropriate model
-    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, '', dprep, led)
+    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, '', dprep)
     if prompt_model_checkpoint:
         prompt_official_name = get_model_official_name(prompt_which_model)
         prompt_checkpoint_filepath = os.path.join(checkpoint_filepath, "..")
@@ -380,7 +379,7 @@ def _log_gpu_usage(logger, prefix):
     logger.info(f"{prefix}: {gpu_usage_str[:-1]}")
 
 
-def run_one_split(logger, model_config: dict = None, optimizer_params=None,
+def run_one_split(logger, model_config: dict = None, optimizer_params=None, epochs: int = 30,
                   which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
                   checkpoint_filepath: str = None, debug: bool = False, prefix='', force_run: bool = False):
     """
@@ -392,7 +391,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
                 'which_model': 'fft' -> full fine-tuning of all parameters.
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
-                'epochs': <Optional>
+        epochs: Integer
         optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
         which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
         batch_size: Number of rows to use per batch
@@ -409,7 +408,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
 
     # 1. Get and process inputs
     # Get inputs from model config
-    model_checkpoint, which_model, epochs, prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
+    model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
         _get_config(model_config)
 
     # Get the optimizer specifications
@@ -441,13 +440,13 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     # Load the data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
-    tfsplits, splits, counts, led = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
+    tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
                                                is_fft=is_fft)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # 4. Get the model
     # Load the appropriate model
-    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen, dprep, led)
+    model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen, dprep)
 
     # 4.2 Maybe we want to load an existing prompt
     if prompt_model_checkpoint and not filen:
@@ -489,7 +488,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None,
     filen_best, start_epoch, all_files = \
         _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen_best)
-    results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['val'])
+    results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['val'], is_fft)
     _log_gpu_usage(logger, prefix="Model evaluated")
 
     # Append history before returning
@@ -525,18 +524,21 @@ def get_optimizer(optimizer_lrs, which_data):
 
     try:
         # This is as per the paper
-        optimizer = tf.keras.optimizers.Adafactor(optimizer_lrs[which_data], weight_decay=1E-5, beta_2_decay=0.8,
-                                                  )
+        optimizer = tf.keras.optimizers.Adafactor(optimizer_lrs[which_data], weight_decay=1E-5, beta_2_decay=0.8)
         optimizer_tag = f'adafactor-learning_rate-{optimizer_lrs[which_data]}'
     except AttributeError:
         optimizer = tf.keras.optimizers.experimental.AdamW(optimizer_lrs[which_data])
         optimizer_tag = f'adamw-learning_rate-{optimizer_lrs[which_data]}'
+        # optimizer = tf.keras.optimizers.SGD(optimizer_lrs[which_data])
+        # optimizer_tag = f'sgd-learning_rate-{optimizer_lrs[which_data]}'
+        # optimizer = tf.keras.optimizers.Adam(optimizer_lrs[which_data])
+        # optimizer_tag = f'sgd-learning_rate-{optimizer_lrs[which_data]}'
     return {'optimizer': optimizer, 'tag': optimizer_tag}
 
 
 def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_size: Union[int, dict] = 4,
                   cache_path: str = None, checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue',
-                  one_task: str = None, prefix=''):
+                  one_task: str = None, prefix='', epochs: int = 30):
     """
 
     Args:
@@ -546,7 +548,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_s
                 'which_model': 'fft' -> full fine-tuning of all parameters.
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
-                'epochs': <Optional>
+        epochs: Number of epochs to run the task
         optimizer_lrs: Dict with key as which_data as value as learning rate
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
@@ -569,6 +571,9 @@ def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_s
     # Convert batch size into a dictionary to pick a value for each task
     if isinstance(batch_size, int):
         batch_size = {k: batch_size for k in tasks}
+
+    if isinstance(epochs, int):
+        epochs = {k: epochs for k in tasks}
 
     # Check of the one task is
     if one_task:
@@ -593,7 +598,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_lrs=None, batch_s
             # If it fails then carry on
             run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
                           batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                          debug=debug, prefix=prefix)
+                          debug=debug, prefix=prefix, epochs=epochs[task])
         except Exception as e:
             # Capture the exception and
             logger.exception(e)

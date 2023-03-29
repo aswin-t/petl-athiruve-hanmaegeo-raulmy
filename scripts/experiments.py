@@ -36,7 +36,6 @@ def get_training_samples(model_checkpoint):
 
 
 def token():
-
     checkpoint = "google/t5-base-lm-adapt"
     # Get the tokenizer for this data
     tokenizer = AutoTokenizer.from_pretrained(checkpoint.replace('_-_', '/'),
@@ -49,20 +48,22 @@ def token():
     print(tokenizer.decode(out_tokens.numpy().reshape(-1, ), skip_special_tokens=False))
 
 
-def experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, benchmark='glue', epochs=30, gpu=0):
+def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
+               epochs=30, gpu=0, lr=0.3):
     """
 
     Args:
+        prefix:
         model_checkpoint: t5-small, t5-base
         max_batch_size: Maximum batch size
         min_num_batches: Minimum number of batches
-        benchmark: glue, super_glue, target
         epochs: Number of training epochs
         gpu: Which GPU to use
+        task:
+        lr:
 
     Returns:
     """
-    prefix = 'experiment'
     which_model = 'soft'
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -76,22 +77,22 @@ def experiment(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=
     model_checkpoint = model_config['model_checkpoint']
     which_model = model_config['which_model']
     logger = create_logger(checkpoint_filepath, filename=f'{prefix}-{model_checkpoint}-{which_model}-benchmark.log')
-    logger.info(f'Performing {benchmark} tuning')
+    logger.info(f'Performing {task} tuning')
 
     # Ensure at least 50 batches
-    task = ('super_glue', 'boolq')
-    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task]/min_num_batches))}
-    for lr in [0.05, ]:
-        # Get the batch size
-        # Run one experiment and log all results
-        # If it fails then carry on
-        optimizer_lrs = {task: lr}
-        optimizer_params = get_optimizer(optimizer_lrs, which_data=task)
-        run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
-                      batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                      debug=True, prefix=prefix)
+    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches))}
+
+    # Get the batch size
+    # Run one experiment and log all results
+    # If it fails then carry on
+    optimizer_lrs = {task: lr}
+    optimizer_params = get_optimizer(optimizer_lrs, which_data=task)
+    run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
+                  batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
+                  debug=True, prefix=prefix)
 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    experiment(model_checkpoint=mcp, max_batch_size=32, min_num_batches=50, benchmark='glue', epochs=100, gpu=0)
+    experiment(prefix='experiment', model_checkpoint=mcp, max_batch_size=32, min_num_batches=50, task=('glue', 'mrpc'),
+               epochs=300, gpu=0)
