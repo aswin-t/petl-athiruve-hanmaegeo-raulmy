@@ -963,9 +963,10 @@ def model_history_to_dlog(logger, history, model_name):
     logger.info(strng)
 
     logger.info(f'iteration,loss,validation loss,accuracy,validation accuracy')
-    for iteration, (loss, val_loss, accuracy, val_accuracy) in \
-            enumerate(zip(history['loss'], history['val_loss'], history['accuracy'], history['val_accuracy'])):
-        logger.info(f'{iteration + 1},{loss},{val_loss},{accuracy},{val_accuracy}')
+    for epoch, (loss, val_loss, accuracy, val_accuracy, selacc, val_selacc) in \
+            enumerate(zip(history['loss'], history['val_loss'], history['accuracy'], history['val_accuracy'],
+                          history['selacc'], history['val_selacc'])):
+        logger.info(f'{epoch + 1},{loss},{val_loss},{accuracy},{val_accuracy},{selacc},{val_selacc}')
 
 
 def _model_structure_to_dlog(logger, model):
@@ -1101,8 +1102,8 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
 
     # Compile the model with Categorical accuracy metric
     model.compile(optimizer=optimizer,
-                  metrics=SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1),
-                  # metrics=tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
+                  metrics=[SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1, skip_zero=False),
+                           SelectiveSparseTopKCategoricalAccuracy(name='selacc', k=1, skip_zero=True)],
                   loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),
                   run_eagerly=debug)
     return model

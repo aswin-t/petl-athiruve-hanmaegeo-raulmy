@@ -69,7 +69,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': epochs}
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
     checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
 
@@ -89,7 +89,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     optimizer_params = get_optimizer(optimizer_lrs, which_data=task)
     run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
                   batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                  debug=True, prefix=prefix)
+                  debug=True, prefix=prefix, epochs=epochs)
 
 
 if __name__ == '__main__':

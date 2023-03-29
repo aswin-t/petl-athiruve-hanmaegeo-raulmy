@@ -11,7 +11,8 @@ from sklearn.metrics import confusion_matrix, f1_score, balanced_accuracy_score,
 
 class SelectiveSparseTopKCategoricalAccuracy(tf.keras.metrics.SparseTopKCategoricalAccuracy):
 
-    def __init__(self, name='multiclass_true_positives', **kwargs):
+    def __init__(self, name='multiclass_true_positives', skip_zero=False, **kwargs):
+        self.skip_zero = skip_zero
         super(SelectiveSparseTopKCategoricalAccuracy, self).__init__(name=name, **kwargs)
 
     def update_state(self, y_true, y_pred, sample_weight=None):
@@ -21,6 +22,13 @@ class SelectiveSparseTopKCategoricalAccuracy(tf.keras.metrics.SparseTopKCategori
         # Here we eliminate the last index because the last index is the end of sequence marker
         # By eliminating it we give credit for the actual word predicted
         # super().update_state(y_true[:, :-1], y_pred[:, :-1, :], sample_weight)
+
+        if self.skip_zero:
+            # Sometimes the token end up in such a way that some classes have a bunch of 0's
+            # We need to weigh the samples as 0
+            sample_weight = tf.cast(y_true > 0, dtype=y_pred.dtype)
+
+        # Counting accuracy with the zeros mak
         super().update_state(y_true[:, :], y_pred[:, :, :], sample_weight)
 
 
