@@ -143,7 +143,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     """
     which_model = 'soft'
 
-    default = {task: {'learning_rate': 0.1, 'weight_decay': 1E-3}}
+    default = {'learning_rate': 0.1, 'weight_decay': 1E-3}
     optimizer_param = default if optimizer_param is None else optimizer_param
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
