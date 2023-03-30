@@ -14,11 +14,11 @@ class LabelEncodeDecode:
     def __init__(self, which):
         self.which = which
         if which[0] == 'super_glue':
-            if which[1] in ['axb', 'axg']:
+            if which[1] in ['axb', 'axg', 'rte']:
                 self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
                 # not_entailment is 5 tokens long plus one end of sequence is 6
                 constants.DECODER_MAX_LEN = 6
-            elif which[1] in ['boolq', 'rte', 'wic', 'wsc', 'multirc']:
+            elif which[1] in ['boolq', 'wic', 'wsc', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
                 # self.lookup = {0: 'absolute truth', 1: 'terrible lie', -1: 'test1 test2'}
                 # True and False are both one token each
