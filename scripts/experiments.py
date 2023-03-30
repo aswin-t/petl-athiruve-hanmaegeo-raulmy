@@ -126,7 +126,7 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
 
 
 def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
-               epochs=30, gpu=0, optimizer_param=None):
+               epochs=None, gpu=0, optimizer_param=None):
     """
 
     Args:
@@ -142,6 +142,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     Returns:
     """
     which_model = 'soft'
+    target_steps = 30000
 
     default = {'learning_rate': 0.1, 'weight_decay': 1E-3}
     optimizer_param = default if optimizer_param is None else optimizer_param
@@ -162,6 +163,9 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     # Ensure at least 50 batches
     batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches))}
 
+    if epochs is None:
+        epochs = int(target_steps/(constants.COUNTS[task]/batch_size[task]))
+
     # Get the batch size
     # Run one experiment and log all results
     # If it fails then carry on
@@ -174,4 +178,4 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
     hyperparameter(prefix='optimization_0', model_checkpoint=mcp, max_batch_size=32, min_num_batches=50,
-                   task=('super_glue', 'rte'), epochs=30, gpu=0)
+                   task=('super_glue', 'rte'), gpu=0)
