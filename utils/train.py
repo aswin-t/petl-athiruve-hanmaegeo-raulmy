@@ -5,6 +5,7 @@ import re
 import copy
 import glob
 import time
+# import wandb
 import tensorflow as tf
 from typing import Union
 from utils.constants import Tasks
@@ -310,6 +311,8 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
     Returns:
 
     """
+    # wandb.init()
+
     if force_run:
         pass
 
@@ -404,6 +407,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     Returns:
 
     """
+
     model_config = model_config.copy()
 
     # 1. Get and process inputs
@@ -457,18 +461,21 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
                                        prompt_which_data)
         tag += '-softprompt-' + prompt_tag
 
+    # Initialize wandb for generalzied soft prompting
+    # wandb.init(project="gsp", notes="run one split", tags=[run_tag, official_name])
+
     # Display model summary
     model.summary()
     _log_gpu_usage(logger, prefix="Model created")
 
     # 5. Train the model
     model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag)
-    history = model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_checkpoint_callback, ],
+    history = model.fit(tfsplits['train'], epochs=epochs,
+                        callbacks=[model_checkpoint_callback, ],  # wandb.keras.WandbMetricsLogger()],
                         validation_data=tfsplits['val'], initial_epoch=start_epoch)
     _log_gpu_usage(logger, prefix="Model fit")
 
     if history.history:
-        # Save history and metrics
         model_history_to_dlog(logger, history.history, official_name)
         history = history.history
     else:
@@ -485,8 +492,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
 
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
-    filen_best, start_epoch, all_files = \
-        _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
+    filen_best, start_epoch, all_files = _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen_best)
     results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['val'], is_fft)
     _log_gpu_usage(logger, prefix="Model evaluated")

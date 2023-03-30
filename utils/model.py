@@ -1,7 +1,7 @@
 import abc
 import copy
-import warnings
 import random
+import warnings
 import numpy as np
 import tensorflow as tf
 from typing import Optional, Union, Tuple
@@ -962,7 +962,7 @@ def model_history_to_dlog(logger, history, model_name):
     strng = f'Model {model_name} history:'
     logger.info(strng)
 
-    logger.info(f'iteration,loss,validation loss,accuracy,validation accuracy')
+    logger.info(f'iteration,loss,validation loss,accuracy,validation accuracy,selacc,validation selacc')
     for epoch, (loss, val_loss, accuracy, val_accuracy, selacc, val_selacc) in \
             enumerate(zip(history['loss'], history['val_loss'], history['accuracy'], history['val_accuracy'],
                           history['selacc'], history['val_selacc'])):
