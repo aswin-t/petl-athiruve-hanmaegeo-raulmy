@@ -79,8 +79,8 @@ def _create_optimizer_experiments(total_steps):
     return out
 
 
-def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
-               epochs=30, gpu=0, lr=0.3):
+def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50,
+                   task=None, epochs=30, gpu=0):
     """
 
     Args:
@@ -91,7 +91,6 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
         epochs: Number of training epochs
         gpu: Which GPU to use
         task:
-        lr:
 
     Returns:
     """
@@ -126,7 +125,52 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
                       debug=True, prefix=prefix, epochs=epochs)
 
 
+def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
+               epochs=30, gpu=0, optimizer_param=None):
+    """
+
+    Args:
+        prefix:
+        model_checkpoint: t5-small, t5-base
+        max_batch_size: Maximum batch size
+        min_num_batches: Minimum number of batches
+        epochs: Number of training epochs
+        gpu: Which GPU to use
+        task:
+        optimizer_param:
+
+    Returns:
+    """
+    which_model = 'soft'
+
+    optimizer_param = {task: {'learning_rate': 0.1, 'weight_decay': 1E-3}}
+
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
+
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
+    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    cache_path = os.path.join(os.path.dirname(__file__), "../cache")
+
+    # Create a log object
+    model_checkpoint = model_config['model_checkpoint']
+    which_model = model_config['which_model']
+    logger = create_logger(checkpoint_filepath, filename=f'{prefix}-{model_checkpoint}-{which_model}-benchmark.log')
+    logger.info(f'Performing {task} tuning')
+
+    # Ensure at least 50 batches
+    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches))}
+
+    # Get the batch size
+    # Run one experiment and log all results
+    # If it fails then carry on
+    optimizer_param_ = get_optimizer(optimizer_param)
+    run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param_, which_data=task,
+                  batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
+                  debug=True, prefix=prefix, epochs=epochs)
+
+
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    experiment(prefix='optimization_0', model_checkpoint=mcp, max_batch_size=32, min_num_batches=50,
-               task=('super_glue', 'rte'), epochs=30, gpu=0)
+    hyperparameter(prefix='optimization_0', model_checkpoint=mcp, max_batch_size=32, min_num_batches=50,
+                   task=('super_glue', 'rte'), epochs=30, gpu=0)

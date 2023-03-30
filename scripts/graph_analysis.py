@@ -26,7 +26,7 @@ def optimization(folder, filename):
     df = pd.DataFrame(to_df)
     for col in df.columns:
         if col != 'abas':
-            mean_ = df.groupby(col)['abas'].mean().sort_values(ascending=False)
+            mean_ = df.groupby(col)['abas'].max().sort_values(ascending=False)
             print(f'####')
             print(col)
             print(mean_)

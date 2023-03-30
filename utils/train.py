@@ -607,12 +607,12 @@ def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batc
                 continue
 
         # Get the optimizer params and then run model
-        optimizer_params = get_optimizer(optimizer_params[task])
+        optimizer_param = get_optimizer(optimizer_params[task])
         try:
             # Get the batch size
             # Run one experiment and log all results
             # If it fails then carry on
-            run_one_split(logger, model_config=model_config, optimizer_params=optimizer_params, which_data=task,
+            run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param, which_data=task,
                           batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
                           debug=debug, prefix=prefix, epochs=epochs[task])
         except Exception as e:

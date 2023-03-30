@@ -9,7 +9,7 @@ from utils.train import run_benchmark
 os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
 
 
-def run_model(benchmark, model_config: dict, optimizer_lrs: dict, checkpoint_filepath: str, debug: bool = False,
+def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_filepath: str, debug: bool = False,
               prefix='', batch_size=None, epochs=None):
     """
 
@@ -22,7 +22,7 @@ def run_model(benchmark, model_config: dict, optimizer_lrs: dict, checkpoint_fil
         epochs: Number training epochs
         benchmark:
         checkpoint_filepath: Location of where the checkpoints are stored
-        optimizer_lrs: optimizer learning rates for each dataset
+        optimizer_params: Optimizer parameters for each dataset
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
         batch_size: Training batch size
@@ -40,7 +40,7 @@ def run_model(benchmark, model_config: dict, optimizer_lrs: dict, checkpoint_fil
     logger.info(f'Performing {benchmark} tuning')
 
     #  Run the superglue benchmark
-    run_benchmark(logger, model_config=model_config, optimizer_lrs=optimizer_lrs, batch_size=batch_size,
+    run_benchmark(logger, model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
                   cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark=benchmark,
                   one_task=None, prefix=prefix, epochs=epochs)
 
@@ -59,7 +59,7 @@ def run_fft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50,
     Returns:
     """
     which_model = 'fft'
-    target_steps = 30000
+    target_steps = 20000
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
@@ -92,7 +92,7 @@ def run_fft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50,
     optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
-    run_model(benchmark=benchmark, model_config=model_config, optimizer_lrs=optimizer_lrs, debug=False,
+    run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_lrs, debug=False,
               prefix='athiruve', batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
 
 
@@ -132,21 +132,10 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
         epochs = {task: epochs for task in tasks}
 
     # Benchmark of target signifies target tasks
-    # Learning rate on log scale
-    try:
-        all_tasks_tag = model_checkpoint + '-' + which_model + '-' + benchmark
-        filepath = os.path.join(checkpoint_filepath, 'optimizer/lro-' + all_tasks_tag + '.p')
-        with open(filepath, 'rb') as infi:
-            optimizer_lrs = pickle.load(infi)
-
-        # Scale the learning rate by the number of epochs * number of batches per epoch
-        optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
-    except FileNotFoundError:
-        optimizer_lrs = {task: 0.3 for task in tasks}
-        # raise FileNotFoundError('Was optimization run to get learning rates?')
+    optimizer_params = {task: {'learning_rate': 0.1, 'weight_decay': 1E-3} for task in tasks}
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
-    run_model(benchmark=benchmark, model_config=model_config, optimizer_lrs=optimizer_lrs, debug=False,
+    run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params, debug=False,
               prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
 
 
