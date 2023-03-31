@@ -45,17 +45,16 @@ def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_
                   one_task=None, prefix=prefix, epochs=epochs)
 
 
-def run_fft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, benchmark='target', epochs=30, gpu=0):
+def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epochs=30, gpu=0, prefix='baseline_fft'):
     """
 
     Args:
         model_checkpoint: t5-small, t5-base
-        max_batch_size: Maximum batch size
-        min_num_batches: Minimum number of batches
+        batch_size: Mini batch size
         benchmark: glue, super_glue, target
         epochs: Number of training epochs
         gpu: Which GPU to use
-
+        prefix: Model prefix to use
     Returns:
     """
     which_model = 'fft'
@@ -69,12 +68,11 @@ def run_fft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50,
 
     # Ensure at least 50 batches
     tasks = Tasks()[benchmark]
-    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches)) for task in tasks}
 
     # Maintaining approximately the same number of steps for all datasets
     # epochs = target_specs/steps per epoch
     if epochs is None:
-        epochs = {task:  int(target_steps/(constants.COUNTS[task]/batch_size[task])) for task in tasks}
+        epochs = {task:  int(target_steps/(constants.COUNTS[task]/batch_size)) for task in tasks}
     else:
         epochs = {task: epochs for task in tasks}
 
@@ -93,17 +91,15 @@ def run_fft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50,
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_lrs, debug=False,
-              prefix='athiruve', batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
+              prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
 
 
-def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, benchmark='glue', epochs=None, gpu=0,
-             prefix='baseline'):
+def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epochs=None, gpu=0, prefix='baseline_soft'):
     """
 
     Args:
         model_checkpoint: t5-small, t5-base
-        max_batch_size: Maximum batch size
-        min_num_batches: Minimum number of batches
+        batch_size: Mini batch size
         benchmark: glue, super_glue, target
         epochs: Number of training epochs
         gpu: Which GPU to use
@@ -121,15 +117,13 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
 
     # Ensure at least 50 batches
     tasks = Tasks()[benchmark]
-    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task]/min_num_batches)) for task in tasks}
 
     # Maintaining approximately the same number of steps for all datasets
     # epochs = target_specs/steps per epoch
     if epochs is None:
-        epochs = {task:  int(target_steps/(constants.COUNTS[task]/batch_size[task])) for task in tasks}
+        epochs = {task:  int(target_steps/(constants.COUNTS[task]/batch_size)) for task in tasks}
     else:
         epochs = {task: epochs for task in tasks}
-
     # Benchmark of target signifies target tasks
     optimizer_params = {task: {'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999}
                         for task in tasks}
@@ -141,4 +135,5 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
 
 if __name__ == '__main__':
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    run_soft(benchmark='glue', gpu=1, epochs=None, model_checkpoint=model_checkpoint_, max_batch_size=32)
+    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft')
+    # run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', epochs=30, prefix='baseline_fft')

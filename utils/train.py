@@ -354,7 +354,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
     # Increase the learning rate linearly within one training epoch
     learning_scheduler = LinearRampScheduler(initial_learning_rate=1E-7, final_learning_rate=100,
                                              total_steps=int(counts['train'] / batch_size))
-    optimizer = optimizer_algo(learning_rate=learning_scheduler)
+    optimizer = optimizer_algo(learning_rate=learning_scheduler, beta_1=0.8, beta_2=0.999, weight_decay=1E-4)
 
     # 4. Get the model
     # Load the appropriate model
