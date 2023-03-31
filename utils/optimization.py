@@ -3,9 +3,7 @@ import pickle
 import numpy as np
 from derivative import dxdt
 import matplotlib.pyplot as plt
-from keras.optimizers import SGD
 from keras.optimizers.optimizer_experimental.adamw import AdamW
-# from keras.optimizers.optimizer_experimental.adafactor import Adafactor
 from utils.log import create_logger
 from utils import constants
 from utils.constants import Tasks
@@ -254,7 +252,7 @@ def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, 
             results = pickle.load(infi)
 
     # Now analyze the results
-    lrs = analyze_results(results, output_path)
+    lrs = analyze_results(results, output_path, lower_range=lower_range, upper_range=upper_range)
     filepath_all = os.path.join(output_path, 'lro-' + all_tasks_tag + '.p')
 
     # If all tasks have completed then just that one file
@@ -283,11 +281,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
     output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
     os.makedirs(output_path, exist_ok=True)
 
-    use_adam = False
-    if use_adam:
-        optimizer_algo = AdamW
-    else:
-        optimizer_algo = SGD
+    optimizer_algo = AdamW
 
     # Create a log object
     logger = create_logger(output_path, filename=f'optimizer_experiments-soft.log')
