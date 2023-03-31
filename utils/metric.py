@@ -1,4 +1,6 @@
+import random
 import evaluate
+import numpy as np
 import tensorflow as tf
 from functools import partial
 from transformers import AutoTokenizer
@@ -7,18 +9,27 @@ from utils.data import LabelEncodeDecode, PrepDataset
 from sklearn.metrics import confusion_matrix, f1_score, balanced_accuracy_score, accuracy_score
 
 
-class SelectiveSparseTopKCategoricalAccuracy(tf.keras.metrics.SparseTopKCategoricalAccuracy):
+class SelectiveSparseCategoricalAccuracy(tf.keras.metrics.SparseCategoricalAccuracy):
 
-    def __init__(self, name='multiclass_true_positives', **kwargs):
-        super(SelectiveSparseTopKCategoricalAccuracy, self).__init__(name=name, **kwargs)
+    def __init__(self, name='multiclass_true_positives', skip_zero=False, **kwargs):
+        self.skip_zero = skip_zero
+        super(SelectiveSparseCategoricalAccuracy, self).__init__(name=name, **kwargs)
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         # tf.print(tf.shape(y_true), tf.shape(y_pred))
         # tf.print(tf.reduce_mean(tf.abs(y_true - tf.math.argmax(y_pred, axis=-1))))
+        # tf.print('\n')
         # tf.print(y_true[0, :], tf.math.argmax(y_pred, axis=-1)[0, :])
         # Here we eliminate the last index because the last index is the end of sequence marker
         # By eliminating it we give credit for the actual word predicted
         # super().update_state(y_true[:, :-1], y_pred[:, :-1, :], sample_weight)
+
+        if self.skip_zero:
+            # Sometimes the token end up in such a way that some classes have a bunch of 0's
+            # We need to weigh the samples as 0
+            sample_weight = tf.cast(y_true > 0, dtype=y_pred.dtype)
+
+        # Counting accuracy with the zeros mak
         super().update_state(y_true[:, :], y_pred[:, :, :], sample_weight)
 
 
@@ -28,7 +39,23 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
-def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size=100):
+def cleanup_predictions(predictions, references):
+    if np.any(np.array(predictions) == -1):
+        pred_ = []
+        classes = set(references)
+        for p, r in zip(predictions, references):
+            if p == -1:
+                # Pick any class other than the reference class
+                pred_.append(list(classes.difference({r}))[random.randint(0, len(classes)-2)])
+            else:
+                # Concatenate prediction
+                pred_.append(p)
+        predictions = pred_
+
+    return predictions
+
+
+def evaluate_metric(logger, tag, which, checkpoint, model, val_split, is_fft, batch_size=100):
     """
 
     Args:
@@ -39,6 +66,7 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
         checkpoint: Tokenizer to use
         val_split: Validation split
         batch_size: Size of batch to generate results
+        is_fft: Is this a FFt run
     Returns:
 
     """
@@ -46,7 +74,7 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
     # Get the tokenizer for this data
     tokenizer = AutoTokenizer.from_pretrained(checkpoint.replace('_-_', '/'),
                                               model_max_length=constants.ENCODER_MAX_LEN)
-    tokenize = partial(PrepDataset.tokenize, tokenizer, True)
+    tokenize = partial(PrepDataset.tokenize, tokenizer, True, is_fft)
     led = LabelEncodeDecode(which)
 
     if which[0] in ['super_glue', 'glue']:
@@ -70,6 +98,10 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, batch_size
 
     # The answers are text, now convert the answers back to labels
     predictions = [led[x] for x in text_predictions]
+
+    # For the ones with an answer not in the answer set, replace with opposite of reference
+    # This is to ensure we do not get credit for anything that is not real
+    predictions = cleanup_predictions(predictions, references)
 
     # Log the prediction and the reference
     logger.info('reference,prediction,predict_text')

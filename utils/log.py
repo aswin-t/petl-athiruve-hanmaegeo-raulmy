@@ -19,9 +19,11 @@ def create_logger(output_folder, filename='model_logs.log', file_level=logging.I
     # Get a logger object
     logger = logging.getLogger(filename)
 
-    #
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    # If logging has laready started then return the existing logger
+    if logger.handlers:
+        return logger
 
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     logger.setLevel(file_level)
 
     # Add a screen logger

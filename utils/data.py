@@ -1,5 +1,6 @@
 import os
-import random
+import numpy as np
+import pandas as pd
 import tensorflow as tf
 from typing import Union
 from functools import partial
@@ -13,11 +14,11 @@ class LabelEncodeDecode:
     def __init__(self, which):
         self.which = which
         if which[0] == 'super_glue':
-            if which[1] in ['axb', 'axg']:
+            if which[1] in ['axb', 'axg', 'rte']:
                 self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
                 # not_entailment is 5 tokens long plus one end of sequence is 6
                 constants.DECODER_MAX_LEN = 6
-            elif which[1] in ['boolq', 'rte', 'wic', 'wsc', 'multirc']:
+            elif which[1] in ['boolq', 'wic', 'wsc.fixed', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
                 # self.lookup = {0: 'absolute truth', 1: 'terrible lie', -1: 'test1 test2'}
                 # True and False are both one token each
@@ -95,13 +96,18 @@ class LabelEncodeDecode:
                     return k
 
             # Did not find the predicted values in the value field
-            keys = list(self.lookup.keys())
-            keys = [x for x in keys if x != -1]
-            random.shuffle(keys)
-            return keys[0]
+            return -1
         else:
             # There is no translation involved
             return inpred
+
+
+def _cleanup_str(strng):
+    strng = strng.rstrip()
+    if strng[-1] != '.':
+        strng += '.'
+
+    return strng
 
 
 class PrepDataset:
@@ -129,6 +135,9 @@ class PrepDataset:
         self.train_dataset = None
         self.valid_dataset = None
         self.num_proc = num_proc
+        self.words = None
+        self.counts = None
+        self.led = None
 
     def __getstate__(self):
         state = self.__dict__
@@ -214,14 +223,13 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence1: {first}"
-            question_plus += f" sentence2: {second}"
-
+            first = _cleanup_str(first)
+            second = _cleanup_str(second)
+            question_plus = f"sentence1: {first} sentence2: {second}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
                 question_plus = 'absence ' * constants.NUM_SOFT_TOKENS + question_plus
-
             outputs = {'question': question_plus, 'answer': answer}
             return outputs
         elif led.which[1] in ['axg', 'cb', 'rte']:
@@ -233,8 +241,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"hypothesis: {hypothesis}"
-            question_plus += f" premise: {premise}"
+            hypothesis = _cleanup_str(hypothesis)
+            premise = _cleanup_str(premise)
+            question_plus = f"hypothesis: {hypothesis} premise: {premise}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -245,21 +254,20 @@ class PrepDataset:
             return outputs
         elif led.which[1] == 'boolq':
             # Context for answering the question
-            first = example['question']
-            second = example['passage']
+            question = example['question']
+            passage = example['passage']
 
             # Convert integer to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f" passage: {second}"
-            question_plus += f"question: {first}"
-
+            question = _cleanup_str(question)
+            passage = _cleanup_str(passage)
+            question_plus = f" passage: {passage} question: {question}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
                 question_plus = 'absence ' * constants.NUM_SOFT_TOKENS + question_plus
-
             outputs = {'question': question_plus, 'answer': answer}
             return outputs
         elif led.which[1] == 'copa':
@@ -273,9 +281,10 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
+            question = _cleanup_str(question)
+            premise = _cleanup_str(premise)
             question_plus = f"choice1: {c1} choice2: {c2} "
-            question_plus += f"premise: {premise} "
-            question_plus = f"question: {question}"
+            question_plus += f"premise: {premise} question: {question}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -293,8 +302,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"question: {question} "
-            question_plus += f" paragraph: {para}"
+            question = _cleanup_str(question)
+            para = _cleanup_str(para)
+            question_plus = f"question: {question} paragraph: {para}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -310,12 +320,7 @@ class PrepDataset:
             # Does replacing this with extra id work better?
             # Do not know but it might be worth trying
             query = example['query']
-            query = query.replace('@placeholder', '<extra_id_0>')
-
             # Convert integer to text
-            # shortest_answer = [len(x) for x in example['answers']]
-            # idx = shortest_answer.index(min(shortest_answer))
-            # answer = example['answers'][idx]
             answer = ', '.join([i for i in list(example['answers'])])
 
             # Adding prompt
@@ -338,9 +343,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"hypothesis: {hypothesis} "
-            question_plus += f"premise: {premise}"
-
+            premise = _cleanup_str(premise)
+            hypothesis = _cleanup_str(hypothesis)
+            question_plus = f"hypothesis: {hypothesis} premise: {premise}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -358,13 +363,13 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
+            sen1 = _cleanup_str(sen1)
+            sen2 = _cleanup_str(sen2)
             question_plus = f"sentence1: {sen1} sentence2: {sen2} word: {word}"
-
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
                 question_plus = 'absence ' * constants.NUM_SOFT_TOKENS + question_plus
-
             outputs = {'question': question_plus, 'answer': answer}
             return outputs
         elif led.which[1] == 'wsc.fixed':
@@ -377,7 +382,10 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"span1: {span1} span2: {span2} paragraph: {para}"
+            para = para.replace(span1, f'*{span1}*')
+            para = para.replace(span2, f'*{span2}*')
+            para = _cleanup_str(para)
+            question_plus = f"paragraph: {para}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -402,6 +410,8 @@ class PrepDataset:
         """
         if led.which[1] in ['cola', 'sst2']:
             sentence = example['sentence']
+
+            sentence = _cleanup_str(sentence)
             question_plus = f"sentence: {sentence}"
 
             # Convert the numeric label to text
@@ -423,9 +433,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"hypothesis: {hypothesis} "
-            question_plus += f"premise: {premise}"
-
+            hypothesis = _cleanup_str(hypothesis)
+            premise = _cleanup_str(premise)
+            question_plus = f"hypothesis: {hypothesis} premise: {premise}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -435,16 +445,16 @@ class PrepDataset:
             return outputs
         elif led.which[1] in ['mrpc', 'rte', 'stsb', 'wnli']:
             # Context for answering the question
-            first = example['sentence1']
-            second = example['sentence2']
+            sen1 = example['sentence1']
+            sen2 = example['sentence2']
 
             # Convert the numeric label to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence1: {first} "
-            question_plus += f"sentence2: {second}"
-
+            sen1 = _cleanup_str(sen1)
+            sen2 = _cleanup_str(sen2)
+            question_plus = f"sentence1: {sen1} sentence2: {sen2}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -454,15 +464,16 @@ class PrepDataset:
             return outputs
         elif led.which[1] in 'qnli':
             # Context for answering the question
-            first = example['question']
-            second = example['sentence']
+            question = example['question']
+            sentence = example['sentence']
 
             # Convert integer to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence: {second} "
-            question_plus += f"question: {first}"
+            sentence = _cleanup_str(sentence)
+            question_plus = f"sentence: {sentence} "
+            question_plus += f"question: {question}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -473,16 +484,14 @@ class PrepDataset:
             return outputs
         elif led.which[1] in 'qqp':
             # Context for answering the question
-            first = example['question1']
-            second = example['question2']
+            q1 = example['question1']
+            q2 = example['question2']
 
             # Convert integer to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"question1: {first} "
-            question_plus += f"question2: {second}"
-
+            question_plus = f"question1: {q1} question2: {q2}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -577,12 +586,13 @@ class PrepDataset:
         return {'question': new_example}
 
     @staticmethod
-    def tokenize(tokenizer, is_test, example):
+    def tokenize(tokenizer, is_test, is_fft, example):
         """
         Our objective is not only to tokenize the input but also to ensure that the after soft prompt is included, the
         embeddings that are removed are all paddings only
 
         Args:
+            is_fft:
             tokenizer: Instance of Autotokenizer initialized appropriately for the checkpoint
             is_test: Whether this is a test set we are working with
             example: Example to be tokenized
@@ -590,14 +600,17 @@ class PrepDataset:
         Returns:
         """
 
-        # Add a period at the end of the sentence
         text = example['question'].rstrip()
-        if text[-1] != '.':
-            text += '.'
 
         # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
-        encoder_inputs = tokenizer(text, truncation=True, max_length=constants.ENCODER_MAX_LEN, padding="max_length",
+        encode_length = constants.ENCODER_MAX_LEN if is_fft else constants.ENCODER_MAX_LEN + constants.NUM_SOFT_TOKENS
+        encoder_inputs = tokenizer(text, truncation=True, max_length=encode_length, padding="max_length",
                                    return_tensors="tf")
+
+        if encoder_inputs['input_ids'][0][-1] != 0:
+            truncated = True
+        else:
+            truncated = False
 
         if is_test:
             return encoder_inputs['input_ids']
@@ -606,8 +619,7 @@ class PrepDataset:
             tmp = str(example['answer']).lower()
         else:
             tmp = str(example['answer'])
-        decoder_inputs = \
-            tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN)['input_ids']
+        decoder_inputs = tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN)['input_ids']
 
         # Set up to return
         input_ids = encoder_inputs['input_ids'][0]
@@ -619,9 +631,9 @@ class PrepDataset:
         target_attention = tf.convert_to_tensor(target_attention, dtype=encoder_inputs['input_ids'].dtype)
 
         return {'input_ids': input_ids, 'attention_mask': input_attention, 'labels': target_ids,
-                'decoder_attention_mask': target_attention}
+                'decoder_attention_mask': target_attention, 'truncated': truncated}
 
-    def encode_and_save(self, which: Union[str, tuple] = 'squad', cache_path: str = None, add_taskname: bool = False):
+    def encode_and_save(self, which: Union[str, tuple] = 'squad', cache_path: str = None, is_fft: bool = False):
         """
 
         Returns:
@@ -633,13 +645,13 @@ class PrepDataset:
 
         # Encode it into a question answer format
         # It also set the value for teh DECODE_MAX_LENGTH based on the answer type
-        encoder, led = self._get_encode(which, add_taskname=add_taskname)
+        encoder, led = self._get_encode(which, add_taskname=is_fft)
         self.logger.info(f'Using function {encoder} with answer lookup {led.lookup}')
 
         which_str = ''.join(f'{x}-' for x in which)
         foldername = which_str
 
-        sub_folder = 'processed/notn' if not add_taskname else 'processed/withtn'
+        sub_folder = 'processed/not_fft' if not is_fft else 'processed/is_fft'
         processed_save_path = os.path.join(cache_path, sub_folder)
 
         if not os.path.exists(os.path.join(processed_save_path, f"{foldername}/val.csv")):
@@ -681,8 +693,33 @@ class PrepDataset:
 
         return led
 
+    def count_words(self, filepath):
+
+        df = pd.read_csv(filepath)
+        q_list = df.question.to_list()
+        out_list = []
+        for q in q_list:
+            out_list += q.split()
+
+        words, counts = np.unique(out_list, return_counts=True)
+        idx = np.argsort(counts)[-1::-1]
+
+        # Words and counts in descending order
+        words = words[idx]
+        counts = counts[idx]
+
+        # remove absence if it is the most common word
+        if words[0] == 'absence':
+            words = words[1:]
+            counts = counts[1:]
+
+        # Convert counts to probability
+        counts = counts/np.sum(counts)
+        self.words = words
+        self.counts = counts
+
     def load_to_memory(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
-                       add_taskname: bool = False):
+                       is_fft: bool = False):
         """
 
         Returns:
@@ -696,7 +733,7 @@ class PrepDataset:
         which_str = ''.join(f'{x}-' for x in which)
         foldername = which_str
 
-        sub_folder = 'processed/notn' if not add_taskname else 'processed/withtn'
+        sub_folder = 'processed/not_fft' if not is_fft else 'processed/is_fft'
         processed_save_path = os.path.join(cache_path, sub_folder)
 
         # Load the dataset from CSV
@@ -705,7 +742,7 @@ class PrepDataset:
         counts = {}
 
         # Create a partial function with tokenize.
-        tokenize = partial(self.tokenize, self.tokenizer, False)
+        tokenize = partial(self.tokenize, self.tokenizer, False, is_fft)
         for split in ['train', 'val']:
             # Load the data from CSV and tokenize
             splits[split] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/{split}.csv"),
@@ -713,7 +750,15 @@ class PrepDataset:
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
-            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc)
+            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=False)
+            before_filter = len(tfsplits[split])
+
+            # Filter truncated examples
+            tfsplits[split] = tfsplits[split].filter(lambda example: not example['truncated'],
+                                                     load_from_cache_file=False)
+            after_filter = len(tfsplits[split])
+            self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
+                             f'after {after_filter} lost {((before_filter-after_filter)/before_filter)*100}%')
             counts[split] = len(splits[split])
 
             # Convert to TensorFlow dataset
@@ -721,17 +766,11 @@ class PrepDataset:
                 batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
                 shuffle=True)
 
-        try:
-            splits['ftest'] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/test.csv"))
-            counts['ftest'] = len(splits['test'])
-        except FileNotFoundError:
-            splits['ftest'] = []
-            counts['ftest'] = 0
-
+        self.count_words(os.path.join(processed_save_path, f"{foldername}/val.csv"))
         return tfsplits, splits, counts
 
     def load(self, which: Union[str, tuple], batch_size: int = 10, as_batches: bool = False, cache_path: str = None,
-             add_taskname: bool = False):
+             is_fft: bool = False, encoder_max_length: int = 250):
         """
 
         Args:
@@ -739,17 +778,20 @@ class PrepDataset:
             as_batches: Return as batches
             batch_size: Size of each batch
             cache_path: Location to save/load cached files
-            add_taskname: Add taskname to task
+            is_fft: Add taskname to task
+            encoder_max_length: Max token length for encoder
         Returns:
 
         """
 
         # Ensure the dataset exists and is processed
-        led = self.encode_and_save(which, cache_path, add_taskname=add_taskname)
+        led = self.encode_and_save(which, cache_path, is_fft=is_fft)
 
+        constants.ENCODER_MAX_LEN = encoder_max_length
         if as_batches:
             raise NotImplementedError('Loading as batches is not implemented')
         else:
-            tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path, add_taskname=add_taskname)
+            tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path, is_fft=is_fft)
 
+        self.led = led
         return tfsplits, splits, counts, led

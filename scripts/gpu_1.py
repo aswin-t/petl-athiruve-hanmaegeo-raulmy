@@ -1,5 +1,7 @@
-from scripts.baseline import run_soft
+from scripts.experiments import experiment
 
 
 if __name__ == '__main__':
-    run_soft(benchmark='super_glue', gpu=1, epochs=30)
+    model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
+    experiment(prefix='optimization_2', gpu=1, epochs=30, model_checkpoint=model_checkpoint_, max_batch_size=32,
+               task=('super_glue', 'copa'))

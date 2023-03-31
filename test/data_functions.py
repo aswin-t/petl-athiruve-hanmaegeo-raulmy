@@ -1,4 +1,7 @@
 import os
+import random
+
+import numpy as np
 from utils import constants
 from utils.data import PrepDataset
 from utils.log import create_logger
@@ -21,7 +24,7 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
              ('duplicate', 'not_duplicate'), ('entailment', 'not_entailment', 'contradiction'),
              ('absolutely positive', 'terribly negative'),
              ('absolute truth', 'terrible lie'),
-             ('follow', 'neutral', 'contradiction'),
+             ('entailment', 'neutral', 'contradiction'),
              ('similar', 'different')
              ]
 
@@ -54,6 +57,25 @@ def text_encode_and_save():
         dprep.encode_and_save(wo, cache_path=cache_path)
 
 
+def compare_predictions():
+    predictions = [1, -1, 3]
+    references = [1, 2, 3]
+    if np.any(np.array(predictions) == -1):
+        pred_ = []
+        classes = set(references)
+        for p, r in zip(predictions, references):
+            if p == -1:
+                # Pick any class other than the reference class
+                pred_.append(list(classes.difference({r}))[random.randint(0, len(classes)-2)])
+            else:
+                pred_.append(r)
+        predictions = pred_
+
+    print(predictions)
+    return predictions
+
+
 if __name__ == '__main__':
-    # check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
-    text_encode_and_save()
+    # compare_predictions()
+    check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
+    # text_encode_and_save()

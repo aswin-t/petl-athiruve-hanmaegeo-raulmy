@@ -1,7 +1,7 @@
 import abc
 import copy
-import warnings
 import random
+import warnings
 import numpy as np
 import tensorflow as tf
 from typing import Optional, Union, Tuple
@@ -12,12 +12,12 @@ from transformers.utils import ContextManagers
 from transformers.modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput, \
     TFBaseModelOutputWithPastAndCrossAttentions
 from utils import constants
-from utils.metric import SelectiveSparseTopKCategoricalAccuracy
+from utils.metric import SelectiveSparseCategoricalAccuracy
 
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
 `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
-`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.Adam
+`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
 If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = tf.ones((num_layers,
 num_heads))`.
 """
@@ -39,10 +39,9 @@ class LinearRampScheduler(tf.keras.optimizers.schedules.LearningRateSchedule):
         self.final_learning_rate_ = final_learning_rate
         self.total_steps_ = total_steps
 
-        self.learning_rates = tf.convert_to_tensor((
-                                                           10 ** np.linspace(np.log10(initial_learning_rate),
-                                                                             np.log10(final_learning_rate),
-                                                                             total_steps)).tolist(), dtype='float32')
+        self.learning_rates = tf.convert_to_tensor((10 ** np.linspace(np.log10(initial_learning_rate),
+                                                                      np.log10(final_learning_rate),
+                                                                      total_steps)).tolist(), dtype='float32')
         self.total_steps = tf.constant(int(total_steps), dtype='int32')
         self.final_learning_rate = tf.constant(final_learning_rate, dtype='float32')
         self.learning_rate = None
@@ -93,7 +92,7 @@ class BatchLossCallback(tf.keras.callbacks.Callback):
 
     def on_train_batch_end(self, batch, logs=None):
         # Get configuration from the optimizer
-        lr = self.model.optimizer.lr.numpy()
+        lr = self.model.optimizer.learning_rate(self._current_steps).numpy()
         self.logger.info(f"{lr},{logs['loss']},{logs['accuracy']}")
         self.history['learning_rate'].append(lr)
         self.history['loss'].append(logs['loss'])
@@ -150,6 +149,7 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_tokens = constants.NUM_SOFT_TOKENS
         self.soft_prompt = None
+        self.initialized = False
 
     def build(self, input_shape):
         """
@@ -161,14 +161,18 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
         """
 
-        # Create a prompt that
-        initializer = tf.keras.initializers.RandomUniform(minval=-0.5, maxval=0.5)
-        self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
-                                           initializer=initializer)
+        if not self.initialized:
+            # Create a prompt that
+            initializer = tf.keras.initializers.RandomUniform(minval=-0.5, maxval=0.5)
+            self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
+                                               initializer=initializer)
+            tf.print('Initializing prompt weights')
+        else:
+            # The weights were already initialized
+            tf.print('Prompt weights were already initialized')
 
         # This is added at the end to let super*() know that build is complete
         super().build(input_shape)
-        tf.print('Building prompt weights')
 
     def call(self, input_embeds, *args, **kwargs):
         """
@@ -182,6 +186,8 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
         """
 
+        # debug = True
+
         # This scales the prompt to the input batch size
         # 1. create an ones array of batch size (batch_size, )
         ones_array = tf.ones((tf.shape(input_embeds)[0],), dtype=self.dtype)
@@ -190,10 +196,11 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         # Gives the shape (batch_size, num_tokens, model_d)
         scaled = tf.tensordot(ones_array, self.soft_prompt, axes=[[], []])
 
-        # Now concat the input embedding to the output embeddings
-        # input_embeds = tf.concat((scaled, input_embeds), axis=1)
-        # return input_embeds[:, :-self.num_tokens, :]
+        # if debug:
+        #     embed_sum_in_start = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
+        #     embed_sum_in_end = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
 
+        # Now concat the input embedding to the output embeddings
         # Replace the first 'n' embedding with our trainable one
         in_shape = tf.shape(input_embeds)
         input_embeds = tf.concat((scaled, input_embeds[:, self.num_tokens:, :]), axis=1)
@@ -201,6 +208,24 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         # This is an artifact of how the model is initialized
         if tf.shape(input_embeds)[1] > in_shape[1]:
             input_embeds = input_embeds[:, :in_shape[1], :]
+        else:
+            pass
+            #
+            # if debug:
+            #     embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
+            #
+            #     tf.print('\nin[0]', embed_sum_in_start[:20], embed_sum_in_start[23:])
+            #     tf.print('out[0]', embed_sum_out[:20], embed_sum_out[23:])
+            #     tf.print('delta[0]', embed_sum_out[:20] - embed_sum_in_start[:20],
+            #              embed_sum_out[20:] - embed_sum_in_start[20:])
+            #
+            #     embed_sum_out = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
+            #     tf.print('\nin[-1]', embed_sum_in_end[:20], embed_sum_in_end[23:])
+            #     tf.print('out[-1]', embed_sum_out[:20], embed_sum_out[23:])
+            #     tf.print('delta[-1]', embed_sum_out[:20] - embed_sum_in_end[:20],
+            #              embed_sum_out[20:] - embed_sum_in_end[20:])
+            #
+            #     tf.print('prompt sum', embed_sum_out[:20])
 
         return input_embeds
 
@@ -308,16 +333,6 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
                 inputs_embeds = self.embed_tokens(input_ids)
                 if not self.is_decoder:
                     inputs_embeds = self.prompt(inputs_embeds)
-
-                # # Do not need this anymore as we are geeting rid of the earlier words
-                # # The attention mask needs to be extended to make this work
-                # if attention_mask is not None:
-                #     before = tf.reduce_sum(attention_mask[0])
-                #     attention_mask = tf.concat(
-                #         (tf.ones((tf.shape(attention_mask)[0], constants.NUM_SOFT_TOKENS),
-                #                  dtype=attention_mask.dtype), attention_mask),
-                #         axis=1)[:, :-constants.NUM_SOFT_TOKENS]
-                #     tf.print(before, tf.reduce_sum(attention_mask[0]))
 
         batch_size, seq_length = input_shape
 
@@ -477,7 +492,7 @@ class PromptTFT5MainLayer(tf.keras.layers.Layer):
             )
 
 
-class TFPromptT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss):
+class TFPromptT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss, abc.ABC):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
@@ -751,6 +766,9 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
 
         # What does X look like?
         x = data
+        # tf.print('\nx')
+        # tf.print(x['input_ids'][0:2, 22:30])
+
         # Extract the Y as labels
         y = x["labels"]
 
@@ -850,6 +868,8 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
             wandb.append(np.load(filen))
 
         # Load the weights into arrays
+        tf.print('Loading prompts with sum of embeddings')
+        tf.print([str(x) for x in np.sum(wandb[0], axis=1)])
         self.encoder.prompt.set_weights(wandb)
 
         return True
@@ -886,7 +906,7 @@ class FullFineTune(TFT5ForConditionalGeneration, abc.ABC):
             # There must be a __call__ method that has the forward pass
             outputs = self(x, training=True)
 
-            # The calculated loss and the
+            # The calculated loss
             loss = outputs[0]
             logits = outputs[1]
 
@@ -947,10 +967,11 @@ def model_history_to_dlog(logger, history, model_name):
     strng = f'Model {model_name} history:'
     logger.info(strng)
 
-    logger.info(f'iteration,loss,validation loss,accuracy,validation accuracy')
-    for iteration, (loss, val_loss, accuracy, val_accuracy) in \
-            enumerate(zip(history['loss'], history['val_loss'], history['accuracy'], history['val_accuracy'])):
-        logger.info(f'{iteration + 1},{loss},{val_loss},{accuracy},{val_accuracy}')
+    logger.info(f'iteration,loss,validation loss,accuracy,validation accuracy,selacc,validation selacc')
+    for epoch, (loss, val_loss, accuracy, val_accuracy, selacc, val_selacc) in \
+            enumerate(zip(history['loss'], history['val_loss'], history['accuracy'], history['val_accuracy'],
+                          history['selacc'], history['val_selacc'])):
+        logger.info(f'{epoch + 1},{loss},{val_loss},{accuracy},{val_accuracy},{selacc},{val_selacc}')
 
 
 def _model_structure_to_dlog(logger, model):
@@ -971,21 +992,18 @@ def _model_structure_to_dlog(logger, model):
         logger.info(strng)
 
 
-def _create_and_load_prompt(tokenizer, led):
+def _create_and_load_prompt(tokenizer, dprep):
     """
 
     Args:
         tokenizer: Object of model tokenizer for finding interesting words
-        led: The label encoder decode object
+        dprep: Dataset preparattion object
 
     Returns:
 
     """
 
-    answers = [v for v in led.lookup.values() if v != 'test']
-    vocab = list(tokenizer.get_vocab().keys())
-    random.shuffle(vocab)
-
+    answers = [v for v in dprep.led.lookup.values() if v != 'test']
     tokens = tokenizer(answers)
 
     # Remove the end of sequence token
@@ -994,9 +1012,11 @@ def _create_and_load_prompt(tokenizer, led):
 
     # These many more tokens are required
     tokens_to_generate = constants.NUM_SOFT_TOKENS - cur_tokens
+    vocab = copy.copy(dprep.words[:300])
+    random.shuffle(vocab)
 
     if tokens_to_generate > 0:
-        this_vocab = [tokenizer(x)['input_ids'][:-1] for x in vocab[:2 * tokens_to_generate]]
+        this_vocab = [tokenizer(x)['input_ids'][:-1] for x in vocab]
         this_vocab = [x for x in this_vocab if len(x) == 1][:tokens_to_generate]
     else:
         this_vocab = []
@@ -1009,7 +1029,7 @@ def _create_and_load_prompt(tokenizer, led):
     return all_tokens
 
 
-def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint_file: str = '', dprep=None, led=None):
+def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint_file: str = '', dprep=None):
     """
 
     Args:
@@ -1021,7 +1041,6 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         logger: Logger for logging progress
         checkpoint_file: File to load checkpoint, if available
         dprep: Data preparatio object
-        led: Label encode/decode object
 
     Returns:
     """
@@ -1041,7 +1060,7 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
             model.load_prompt(checkpoint_file)
         else:
             # if the model is a soft prompt model then it could benefit from an initialization
-            tokens = _create_and_load_prompt(dprep.tokenizer, led)
+            tokens = _create_and_load_prompt(dprep.tokenizer, dprep)
             # Prompt embeddings
             prompts = model.shared(tf.convert_to_tensor(tokens, dtype='int32')).numpy()
             model.load_prompt(prompts)
@@ -1081,8 +1100,8 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
 
     # Compile the model with Categorical accuracy metric
     model.compile(optimizer=optimizer,
-                  metrics=SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1),
-                  # metrics=tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
+                  metrics=[SelectiveSparseCategoricalAccuracy(name='accuracy', skip_zero=False),
+                           SelectiveSparseCategoricalAccuracy(name='selacc', skip_zero=True)],
                   loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),
                   run_eagerly=debug)
     return model
