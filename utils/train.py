@@ -8,6 +8,7 @@ import time
 # import wandb
 import tensorflow as tf
 from typing import Union
+from utils import constants
 from utils.constants import Tasks
 from utils.data import PrepDataset
 from utils.metric import evaluate_metric
@@ -254,6 +255,8 @@ def _get_config(model_config):
     model_checkpoint = check_config(model_config, 'model_checkpoint', default=None, required=True)
     which_model = check_config(model_config, 'which_model', default=None, required=True)
     prompt_specs = check_config(model_config, 'prompt_transfer', default=None, required=False)
+    encoder_max_length = check_config(model_config, 'encoder_max_length', default=constants.ENCODER_MAX_LEN,
+                                      required=False)
 
     if prompt_specs is not None:
         prompt_model_checkpoint = prompt_specs['model_checkpoint']
@@ -267,7 +270,8 @@ def _get_config(model_config):
     if model_config:
         raise KeyError(f'Unexpected keys {list(model_config.keys())} in model_config')
 
-    return model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model
+    return model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model, \
+        encoder_max_length
 
 
 def _log_gpu_usage(logger, prefix):
@@ -321,8 +325,8 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
 
     # 1. Get and process inputs
     # Get inputs from model config
-    model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
-        _get_config(model_config)
+    model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model, \
+        encoder_max_length = _get_config(model_config)
     logger.info(f'LR optimization on checkpoint {model_checkpoint} of {prompt_which_model}')
 
     # Get model official name
@@ -344,7 +348,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
     tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                             is_fft=is_fft)
+                                             is_fft=is_fft, encoder_max_length=encoder_max_length)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # Increase the learning rate linearly within one training epoch
@@ -412,8 +416,8 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
 
     # 1. Get and process inputs
     # Get inputs from model config
-    model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model = \
-        _get_config(model_config)
+    model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model, \
+        encoder_max_length = _get_config(model_config)
 
     # Get the optimizer specifications
     optimizer_params = {} if optimizer_params is None else optimizer_params
@@ -445,7 +449,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
     tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                             is_fft=is_fft)
+                                             is_fft=is_fft, encoder_max_length=encoder_max_length)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # 4. Get the model

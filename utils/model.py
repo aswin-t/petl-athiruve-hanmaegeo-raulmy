@@ -12,7 +12,7 @@ from transformers.utils import ContextManagers
 from transformers.modeling_tf_outputs import TFSeq2SeqLMOutput, TFBaseModelOutput, \
     TFBaseModelOutputWithPastAndCrossAttentions
 from utils import constants
-from utils.metric import SelectiveSparseTopKCategoricalAccuracy
+from utils.metric import SelectiveSparseCategoricalAccuracy
 
 _HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
@@ -186,7 +186,7 @@ class PromptDenseLayer(tf.keras.layers.Layer):
 
         """
 
-        # debug = False
+        # debug = True
 
         # This scales the prompt to the input batch size
         # 1. create an ones array of batch size (batch_size, )
@@ -210,6 +210,7 @@ class PromptDenseLayer(tf.keras.layers.Layer):
             input_embeds = input_embeds[:, :in_shape[1], :]
         else:
             pass
+            #
             # if debug:
             #     embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
             #
@@ -223,6 +224,8 @@ class PromptDenseLayer(tf.keras.layers.Layer):
             #     tf.print('out[-1]', embed_sum_out[:20], embed_sum_out[23:])
             #     tf.print('delta[-1]', embed_sum_out[:20] - embed_sum_in_end[:20],
             #              embed_sum_out[20:] - embed_sum_in_end[20:])
+            #
+            #     tf.print('prompt sum', embed_sum_out[:20])
 
         return input_embeds
 
@@ -865,6 +868,8 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
             wandb.append(np.load(filen))
 
         # Load the weights into arrays
+        tf.print('Loading prompts with sum of embeddings')
+        tf.print([str(x) for x in np.sum(wandb[0], axis=1)])
         self.encoder.prompt.set_weights(wandb)
 
         return True
@@ -1007,15 +1012,8 @@ def _create_and_load_prompt(tokenizer, dprep):
 
     # These many more tokens are required
     tokens_to_generate = constants.NUM_SOFT_TOKENS - cur_tokens
-
     vocab = copy.copy(dprep.words[:300])
     random.shuffle(vocab)
-    # These counts are actually probabilities
-    # counts = np.cumsum(dprep.counts)
-    # for i in range(2*tokens_to_generate):
-    #     # Generates a word with the probabaility of occurence
-    #     idx = counts < random.random()
-    #     vocab.append(dprep.words[idx])
 
     if tokens_to_generate > 0:
         this_vocab = [tokenizer(x)['input_ids'][:-1] for x in vocab]
@@ -1102,8 +1100,8 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
 
     # Compile the model with Categorical accuracy metric
     model.compile(optimizer=optimizer,
-                  metrics=[SelectiveSparseTopKCategoricalAccuracy(name='accuracy', k=1, skip_zero=False),
-                           SelectiveSparseTopKCategoricalAccuracy(name='selacc', k=1, skip_zero=True)],
+                  metrics=[SelectiveSparseCategoricalAccuracy(name='accuracy', skip_zero=False),
+                           SelectiveSparseCategoricalAccuracy(name='selacc', skip_zero=True)],
                   loss=tf.losses.SparseCategoricalCrossentropy(from_logits=True),
                   run_eagerly=debug)
     return model

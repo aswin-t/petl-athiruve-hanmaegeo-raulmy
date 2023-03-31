@@ -76,6 +76,6 @@ def compare_predictions():
 
 
 if __name__ == '__main__':
-    compare_predictions()
-    # check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
+    # compare_predictions()
+    check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
     # text_encode_and_save()

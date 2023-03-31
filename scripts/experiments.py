@@ -57,37 +57,38 @@ def _create_optimizer_experiments(total_steps):
     """
 
     scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts
-    weight_decays = [0, 1E-5, 1E-4, 1E-3]
-    learning_rates = [0.01, 0.03, 0.1, 0.3]
-    do_schedulers = [False, True]
+    weight_decays = [1E-5, 1E-3]
+    learning_rates = [0.3]
+    beta1_decays = [0.7, 0.8, 0.9]
+    beta2_decays = [0.99, 0.999, 0.9999]
+    do_schedulers = [False, ]
 
     first_decay_steps = int(total_steps / 3)
 
-    combos = list(product(*[learning_rates, weight_decays, do_schedulers]))
+    combos = list(product(*[learning_rates, weight_decays, do_schedulers, beta1_decays, beta2_decays]))
     random.shuffle(combos)
 
     out = []
     for combo in combos:
         # Get the learning rate
-        if combo[-1]:
+        if combo[2]:
             lr = scheduler(initial_learning_rate=combo[0], first_decay_steps=first_decay_steps, t_mul=2.0)
         else:
             lr = combo[0]
-        param = {'learning_rate': lr, 'weight_decay': combo[1]}
+        param = {'learning_rate': lr, 'weight_decay': combo[1], 'beta_1': combo[3], 'beta_2': combo[4]}
         out.append(param)
 
     return out
 
 
-def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50,
-                   task=None, epochs=30, gpu=0):
+def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_batch_size=100, task=None, epochs=30,
+                   gpu=0):
     """
 
     Args:
         prefix:
         model_checkpoint: t5-small, t5-base
         max_batch_size: Maximum batch size
-        min_num_batches: Minimum number of batches
         epochs: Number of training epochs
         gpu: Which GPU to use
         task:
@@ -110,7 +111,7 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
     logger.info(f'Performing {task} tuning')
 
     # Ensure at least 50 batches
-    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches))}
+    batch_size = {task: max_batch_size}
 
     # Get the batch size
     # Run one experiment and log all results
@@ -126,7 +127,7 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
 
 
 def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
-               epochs=None, gpu=0, optimizer_param=None):
+               epochs=None, gpu=0, optimizer_param=None, encoder_max_length=None):
     """
 
     Args:
@@ -138,6 +139,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
         gpu: Which GPU to use
         task:
         optimizer_param:
+        encoder_max_length: Max length to encode the inputs
 
     Returns:
     """
@@ -150,7 +152,8 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model,
+                    'encoder_max_length': encoder_max_length}
     checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
 
@@ -177,5 +180,8 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    hyperparameter(prefix='optimization_0', model_checkpoint=mcp, max_batch_size=32, min_num_batches=50,
-                   task=('super_glue', 'rte'), gpu=0)
+    # hyperparameter(prefix='betas', model_checkpoint=mcp, max_batch_size=32, task=('super_glue', 'wic'), gpu=0,
+    #                epochs=50)
+    experiment(prefix='encoder_length', model_checkpoint=mcp, max_batch_size=32, task=('super_glue', 'wsc.fixed'),
+               gpu=0, epochs=1, encoder_max_length=300,
+               optimizer_param={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})

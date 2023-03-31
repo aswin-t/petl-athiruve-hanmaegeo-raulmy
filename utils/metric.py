@@ -9,15 +9,16 @@ from utils.data import LabelEncodeDecode, PrepDataset
 from sklearn.metrics import confusion_matrix, f1_score, balanced_accuracy_score, accuracy_score
 
 
-class SelectiveSparseTopKCategoricalAccuracy(tf.keras.metrics.SparseTopKCategoricalAccuracy):
+class SelectiveSparseCategoricalAccuracy(tf.keras.metrics.SparseCategoricalAccuracy):
 
     def __init__(self, name='multiclass_true_positives', skip_zero=False, **kwargs):
         self.skip_zero = skip_zero
-        super(SelectiveSparseTopKCategoricalAccuracy, self).__init__(name=name, **kwargs)
+        super(SelectiveSparseCategoricalAccuracy, self).__init__(name=name, **kwargs)
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         # tf.print(tf.shape(y_true), tf.shape(y_pred))
         # tf.print(tf.reduce_mean(tf.abs(y_true - tf.math.argmax(y_pred, axis=-1))))
+        # tf.print('\n')
         # tf.print(y_true[0, :], tf.math.argmax(y_pred, axis=-1)[0, :])
         # Here we eliminate the last index because the last index is the end of sequence marker
         # By eliminating it we give credit for the actual word predicted

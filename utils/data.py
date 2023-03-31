@@ -18,7 +18,7 @@ class LabelEncodeDecode:
                 self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
                 # not_entailment is 5 tokens long plus one end of sequence is 6
                 constants.DECODER_MAX_LEN = 6
-            elif which[1] in ['boolq', 'wic', 'wsc', 'multirc']:
+            elif which[1] in ['boolq', 'wic', 'wsc.fixed', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
                 # self.lookup = {0: 'absolute truth', 1: 'terrible lie', -1: 'test1 test2'}
                 # True and False are both one token each
@@ -384,7 +384,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"span1: {span1} span2: {span2} paragraph: {para}"
+            para = para.replace(span1, f'*{span1}*')
+            para = para.replace(span2, f'*{span2}*')
+            question_plus = f"paragraph: {para}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -449,9 +451,7 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence1: {first} "
-            question_plus += f"sentence2: {second}"
-
+            question_plus = f"sentence1: {first} sentence2: {second}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -605,6 +605,11 @@ class PrepDataset:
         encoder_inputs = tokenizer(text, truncation=True, max_length=encode_length, padding="max_length",
                                    return_tensors="tf")
 
+        if encoder_inputs['input_ids'][0][-1] != 0:
+            truncated = True
+        else:
+            truncated = False
+
         if is_test:
             return encoder_inputs['input_ids']
 
@@ -624,7 +629,7 @@ class PrepDataset:
         target_attention = tf.convert_to_tensor(target_attention, dtype=encoder_inputs['input_ids'].dtype)
 
         return {'input_ids': input_ids, 'attention_mask': input_attention, 'labels': target_ids,
-                'decoder_attention_mask': target_attention}
+                'decoder_attention_mask': target_attention, 'truncated': truncated}
 
     def encode_and_save(self, which: Union[str, tuple] = 'squad', cache_path: str = None, is_fft: bool = False):
         """
@@ -743,7 +748,15 @@ class PrepDataset:
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
-            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc)
+            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=False)
+            before_filter = len(tfsplits[split])
+
+            # Filter truncated examples
+            tfsplits[split] = tfsplits[split].filter(lambda example: not example['truncated'],
+                                                     load_from_cache_file=False)
+            after_filter = len(tfsplits[split])
+            self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
+                             f'after {after_filter} lost {((before_filter-after_filter)/before_filter)*100}%')
             counts[split] = len(splits[split])
 
             # Convert to TensorFlow dataset
@@ -752,11 +765,10 @@ class PrepDataset:
                 shuffle=True)
 
         self.count_words(os.path.join(processed_save_path, f"{foldername}/val.csv"))
-
         return tfsplits, splits, counts
 
     def load(self, which: Union[str, tuple], batch_size: int = 10, as_batches: bool = False, cache_path: str = None,
-             is_fft: bool = False):
+             is_fft: bool = False, encoder_max_length: int = 250):
         """
 
         Args:
@@ -765,6 +777,7 @@ class PrepDataset:
             batch_size: Size of each batch
             cache_path: Location to save/load cached files
             is_fft: Add taskname to task
+            encoder_max_length: Max token length for encoder
         Returns:
 
         """
@@ -772,6 +785,7 @@ class PrepDataset:
         # Ensure the dataset exists and is processed
         led = self.encode_and_save(which, cache_path, is_fft=is_fft)
 
+        constants.ENCODER_MAX_LEN = encoder_max_length
         if as_batches:
             raise NotImplementedError('Loading as batches is not implemented')
         else:
