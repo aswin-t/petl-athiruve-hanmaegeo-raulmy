@@ -16,7 +16,7 @@ os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
 
 def get_training_samples(model_checkpoint):
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
-    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/batches")
+    output_path = os.path.join(os.path.dirname(__file__), "../mycheckpoints/batches")
     os.makedirs(output_path, exist_ok=True)
 
     # Create a log object
@@ -101,7 +101,7 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
-    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
 
     # Create a log object
@@ -154,7 +154,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
 
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model,
                     'encoder_max_length': encoder_max_length}
-    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
 
     # Create a log object

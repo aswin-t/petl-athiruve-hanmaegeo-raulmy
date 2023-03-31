@@ -37,7 +37,7 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
 
 
 def text_encode_and_save():
-    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    output_path = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
     model_checkpoint = 't5-small'
 

@@ -64,7 +64,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': epochs}
-    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
 
     # Ensure at least 50 batches
     tasks = Tasks()[benchmark]
@@ -113,7 +113,7 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
-    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../checkpoints")
+    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
 
     # Ensure at least 50 batches
     tasks = Tasks()[benchmark]

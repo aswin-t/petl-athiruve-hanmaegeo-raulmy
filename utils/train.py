@@ -307,7 +307,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
         which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
-        checkpoint_filepath: Path to store the model checkpoints and log file
+        checkpoint_filepath: Path to store the model mycheckpoints and log file
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
         force_run: Force a rerun even if a file exists
@@ -403,7 +403,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
         which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
-        checkpoint_filepath: Path to store the model checkpoints and log file
+        checkpoint_filepath: Path to store the model mycheckpoints and log file
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
         force_run: Force a rerun even if a file exists
@@ -572,7 +572,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batc
         optimizer_params: Dict with key as task and value as optimizer parameters
         batch_size: Number of rows to use per batch
         cache_path: Path to store the cache files
-        checkpoint_filepath: Path to store the model checkpoints and log file
+        checkpoint_filepath: Path to store the model mycheckpoints and log file
         benchmark: Which benchmark to run glue or superglue
         debug: if True then eager model of evaluation is run, else graph mode
         one_task: Which superglue task to run

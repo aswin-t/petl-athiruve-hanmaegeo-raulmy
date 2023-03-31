@@ -60,5 +60,5 @@ def optimization(folder, filename):
 
 if __name__ == '__main__':
     fn = "betas-google_-_t5-base-lm-adapt-soft-benchmark.log"
-    ff = '/home/aswin/Documents/MIDS/petl-athiruve-hanmaegeo-raulmy/checkpoints'
+    ff = '/home/aswin/Documents/MIDS/petl-athiruve-hanmaegeo-raulmy/mycheckpoints'
     optimization(ff, fn)

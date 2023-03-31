@@ -202,7 +202,7 @@ def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, 
 
     Returns:
     """
-    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
+    output_path = os.path.join(os.path.dirname(__file__), "../mycheckpoints/optimizer")
     os.makedirs(output_path, exist_ok=True)
     optimizer_algo = AdamW
 
@@ -278,7 +278,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
         bm_str = ''.join(f"{x}-" for x in benchmark[0])
     batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches)) for task in tasks}
 
-    output_path = os.path.join(os.path.dirname(__file__), "../checkpoints/optimizer")
+    output_path = os.path.join(os.path.dirname(__file__), "../mycheckpoints/optimizer")
     os.makedirs(output_path, exist_ok=True)
 
     optimizer_algo = AdamW
