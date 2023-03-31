@@ -107,7 +107,7 @@ def run_soft(model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50
         benchmark: glue, super_glue, target
         epochs: Number of training epochs
         gpu: Which GPU to use
-        prefix:
+        prefix: Prefix for run differentiate log files
     Returns:
     """
 

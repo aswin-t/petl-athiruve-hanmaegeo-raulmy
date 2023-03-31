@@ -320,12 +320,7 @@ class PrepDataset:
             # Does replacing this with extra id work better?
             # Do not know but it might be worth trying
             query = example['query']
-            query = query.replace('@placeholder', '<extra_id_0>')
-
             # Convert integer to text
-            # shortest_answer = [len(x) for x in example['answers']]
-            # idx = shortest_answer.index(min(shortest_answer))
-            # answer = example['answers'][idx]
             answer = ', '.join([i for i in list(example['answers'])])
 
             # Adding prompt
@@ -348,6 +343,8 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
+            premise = _cleanup_str(premise)
+            hypothesis = _cleanup_str(hypothesis)
             question_plus = f"hypothesis: {hypothesis} premise: {premise}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -366,12 +363,13 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
+            sen1 = _cleanup_str(sen1)
+            sen2 = _cleanup_str(sen2)
             question_plus = f"sentence1: {sen1} sentence2: {sen2} word: {word}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
                 question_plus = 'absence ' * constants.NUM_SOFT_TOKENS + question_plus
-
             outputs = {'question': question_plus, 'answer': answer}
             return outputs
         elif led.which[1] == 'wsc.fixed':
@@ -386,6 +384,7 @@ class PrepDataset:
             # Adding prompt
             para = para.replace(span1, f'*{span1}*')
             para = para.replace(span2, f'*{span2}*')
+            para = _cleanup_str(para)
             question_plus = f"paragraph: {para}"
 
             if add_taskname:
@@ -411,6 +410,8 @@ class PrepDataset:
         """
         if led.which[1] in ['cola', 'sst2']:
             sentence = example['sentence']
+
+            sentence = _cleanup_str(sentence)
             question_plus = f"sentence: {sentence}"
 
             # Convert the numeric label to text
@@ -432,9 +433,9 @@ class PrepDataset:
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"hypothesis: {hypothesis} "
-            question_plus += f"premise: {premise}"
-
+            hypothesis = _cleanup_str(hypothesis)
+            premise = _cleanup_str(premise)
+            question_plus = f"hypothesis: {hypothesis} premise: {premise}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -444,14 +445,16 @@ class PrepDataset:
             return outputs
         elif led.which[1] in ['mrpc', 'rte', 'stsb', 'wnli']:
             # Context for answering the question
-            first = example['sentence1']
-            second = example['sentence2']
+            sen1 = example['sentence1']
+            sen2 = example['sentence2']
 
             # Convert the numeric label to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence1: {first} sentence2: {second}"
+            sen1 = _cleanup_str(sen1)
+            sen2 = _cleanup_str(sen2)
+            question_plus = f"sentence1: {sen1} sentence2: {sen2}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
@@ -461,15 +464,16 @@ class PrepDataset:
             return outputs
         elif led.which[1] in 'qnli':
             # Context for answering the question
-            first = example['question']
-            second = example['sentence']
+            question = example['question']
+            sentence = example['sentence']
 
             # Convert integer to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"sentence: {second} "
-            question_plus += f"question: {first}"
+            sentence = _cleanup_str(sentence)
+            question_plus = f"sentence: {sentence} "
+            question_plus += f"question: {question}"
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -480,16 +484,14 @@ class PrepDataset:
             return outputs
         elif led.which[1] in 'qqp':
             # Context for answering the question
-            first = example['question1']
-            second = example['question2']
+            q1 = example['question1']
+            q2 = example['question2']
 
             # Convert integer to text
             answer = led(example['label'])
 
             # Adding prompt
-            question_plus = f"question1: {first} "
-            question_plus += f"question2: {second}"
-
+            question_plus = f"question1: {q1} question2: {q2}"
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
             else:
