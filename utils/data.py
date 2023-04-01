@@ -11,62 +11,112 @@ from utils import constants
 
 class LabelEncodeDecode:
 
-    def __init__(self, which):
+    def __init__(self, which, do_equal=False):
         self.which = which
+        self.do_equal = do_equal
+        self.has_versions = False
         if which[0] == 'super_glue':
             if which[1] in ['axb', 'axg', 'rte']:
-                self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                constants.DECODER_MAX_LEN = 6
+                if not self.do_equal:
+                    self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
+                    # Entailment is 4, not_entailment is 5
+                    constants.DECODER_MAX_LEN = 5
+                else:
+                    self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
+                    # Entailment is 4, neutral or contradiction is 3
+                    constants.DECODER_MAX_LEN = 4
+                self.has_versions = True
             elif which[1] in ['boolq', 'wic', 'wsc.fixed', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
-                # self.lookup = {0: 'absolute truth', 1: 'terrible lie', -1: 'test1 test2'}
-                # True and False are both one token each
-                constants.DECODER_MAX_LEN = 2
+                # True and False are both 1
+                constants.DECODER_MAX_LEN = 1
+                self.has_versions = False
             elif which[1] == 'cb':
-                # self.lookup = {0: 'entailment', 1: 'contradiction', 2: 'neutral', -1: 'test'}
-                self.lookup = {0: 'follow', 1: 'contradiction', 2: 'neutral', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                constants.DECODER_MAX_LEN = 2
+                if not self.do_equal:
+                    self.lookup = {0: 'entailment', 1: 'contradiction', 2: 'neutral', -1: 'test'}
+                    # Entailment is 4, contradiction is 1 and neutral is 1
+                    constants.DECODER_MAX_LEN = 4
+                else:
+                    # Make the three the same length
+                    self.lookup = {0: 'implies', 1: 'contradiction', 2: 'neutral', -1: 'test'}
+                    # Implies is 1, contradiction is 1 and neutral is 1
+                    constants.DECODER_MAX_LEN = 1
+                self.has_versions = True
             elif which[1] == 'copa':
                 self.lookup = {0: 'choice1', 1: 'choice2', -1: 'test'}
-                # choice1 and choice2  are 2 tokens long plus one end of sequence is 3
-                constants.DECODER_MAX_LEN = 3
+                # choice1 and choice2  are 2 tokens long
+                constants.DECODER_MAX_LEN = 2
+                self.has_versions = False
             else:
                 self.lookup = {}
                 # This is a longer answer and requires 50
                 constants.DECODER_MAX_LEN = 20
+                self.has_versions = False
         elif which[0] == 'glue':
-            if which[1] in ['qnli', 'rte', 'wnli']:
-                self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                constants.DECODER_MAX_LEN = 6
+            if which[1] in ['qnli', 'rte']:
+                if not self.do_equal:
+                    self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
+                    # Entailment is 4, not_entailment is 5
+                    constants.DECODER_MAX_LEN = 5
+                else:
+                    self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
+                    # Entailment is 4, neutral or contradiction is 3
+                    constants.DECODER_MAX_LEN = 4
+                self.has_versions = True
+            if which[1] in ['wnli', ]:
+                if not self.do_equal:
+                    self.lookup = {0: 'not_entailment', 1: 'entailment', -1: 'test'}
+                    # Entailment is 4, not_entailment is 5
+                    constants.DECODER_MAX_LEN = 5
+                else:
+                    self.lookup = {0: 'neutral or contradiction', 1: 'entailment', -1: 'test'}
+                    # Entailment is 4, neutral or contradiction is 3
+                    constants.DECODER_MAX_LEN = 4
+                self.has_versions = True
             elif which[1] in ['sst2', ]:
                 self.lookup = {0: 'negative', 1: 'positive', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                constants.DECODER_MAX_LEN = 2
+                # Negative and positive are both 1
+                constants.DECODER_MAX_LEN = 1
+                self.has_versions = False
             elif which[1] in ['cola', ]:
                 self.lookup = {0: 'unacceptable', 1: 'acceptable', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                constants.DECODER_MAX_LEN = 2
+                # Acceptable and unacceptable are both 1
+                constants.DECODER_MAX_LEN = 1
+                self.has_versions = False
             elif which[1] in ['mrpc', ]:
-                self.lookup = {0: 'equivalent', 1: 'not_equivalent', -1: 'test'}
-                # self.lookup = {0: 'similar', 1: 'different', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                # constants.DECODER_MAX_LEN = 2
-                constants.DECODER_MAX_LEN = 6
+                if not self.do_equal:
+                    self.lookup = {0: 'equivalent', 1: 'not_equivalent', -1: 'test'}
+                    # Equivalent is 1, not_equivalent is 5
+                    constants.DECODER_MAX_LEN = 5
+                else:
+                    self.lookup = {0: 'equivalent', 1: 'different', -1: 'test'}
+                    # Equivalent and different are 1
+                    constants.DECODER_MAX_LEN = 1
+                self.has_versions = True
             elif which[1] in ['qqp', ]:
-                self.lookup = {0: 'duplicate', 1: 'not_duplicate', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                constants.DECODER_MAX_LEN = 6
+                if not self.do_equal:
+                    self.lookup = {0: 'not_duplicate', 1: 'duplicate', -1: 'test'}
+                    # Duplicate is 1 and not duplicate is 5
+                    constants.DECODER_MAX_LEN = 5
+                else:
+                    self.lookup = {0: 'different', 1: 'duplicate', -1: 'test'}
+                    # Duplicate and different are 1
+                    constants.DECODER_MAX_LEN = 1
+                self.has_versions = True
             elif which[1] in ['mnli', ]:
-                self.lookup = {0: 'entailment', 1: 'contradiction', 2: 'neutral', -1: 'test'}
-                # not_entailment is 5 tokens long plus one end of sequence is 6
-                constants.DECODER_MAX_LEN = 6
+                if not self.do_equal:
+                    self.lookup = {0: 'entailment', 1: 'neutral', 2: 'contradiction',  -1: 'test'}
+                    # entailment is 4, contradiction is 1 and neutral is 1
+                    constants.DECODER_MAX_LEN = 5
+                else:
+                    # implies is 1, contradiction is 1 and neutral is 1
+                    self.lookup = {0: 'implies', 1: 'neutral', 2: 'contradiction', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
+                self.has_versions = True
             else:
                 self.lookup = {}
-                # This is a longer answer and requires 50
                 constants.DECODER_MAX_LEN = 50
+                self.has_versions = False
         else:
             self.lookup = {}
             # This is a longer answer and requires 50
@@ -77,6 +127,19 @@ class LabelEncodeDecode:
 
     def __getitem__(self, item):
         return self.to_label(item)
+
+    def get_tag(self):
+        """
+
+        Returns:
+
+        """
+        tag = "".join(f'{x}-' for x in self.which)
+        # Also add the answer format
+        if self.has_versions:
+            tag += 'equal' if self.do_equal else 'unequal'
+
+        return tag[:-1]
 
     def from_label(self, inlabel):
 
@@ -502,19 +565,19 @@ class PrepDataset:
         else:
             raise KeyError('Unknown datatype for translation')
 
-    def _get_encode(self, which, add_taskname):
+    def _get_encode(self, which, add_taskname, do_equal=False):
         """
 
         Args:
             which: Which dataset
             add_taskname: add the taskname to the task
-
+            do_equal: Make task token lengths equal?
         Returns:
 
         """
 
         # Create a label encoder decoder for converting from labels to text and back
-        led = LabelEncodeDecode(which)
+        led = LabelEncodeDecode(which, do_equal=do_equal)
 
         if which[0] == 'super_glue':
             return partial(self.encode_super_glue, led, add_taskname), led
@@ -633,11 +696,20 @@ class PrepDataset:
         return {'input_ids': input_ids, 'attention_mask': input_attention, 'labels': target_ids,
                 'decoder_attention_mask': target_attention, 'truncated': truncated}
 
-    def encode_and_save(self, which: Union[str, tuple] = 'squad', cache_path: str = None, is_fft: bool = False):
+    def encode_and_save(self, which: Union[str, tuple] = 'squad', cache_path: str = None, is_fft: bool = False,
+                        token_equalize: bool = False):
         """
 
+        Args:
+            which: Which dataset is it processing. ex; ('glue', 'cola')
+            cache_path: Path for the cache file
+            is_fft: Is this full fine tuning or sot prompt
+            token_equalize: Make token length sequal for the answer?
+
         Returns:
+
         """
+
         if not isinstance(which, tuple):
             which = (which,)
 
@@ -645,17 +717,20 @@ class PrepDataset:
 
         # Encode it into a question answer format
         # It also set the value for teh DECODE_MAX_LENGTH based on the answer type
-        encoder, led = self._get_encode(which, add_taskname=is_fft)
+        encoder, led = self._get_encode(which, add_taskname=is_fft, do_equal=token_equalize)
         self.logger.info(f'Using function {encoder} with answer lookup {led.lookup}')
 
-        which_str = ''.join(f'{x}-' for x in which)
-        foldername = which_str
+        # The foldername name will be  the task name
+        foldername = ''.join(f'{x}-' for x in which)
+        # Also add the answer format
+        if led.has_versions:
+            foldername += 'equal' if led.do_equal else 'unequal'
 
         sub_folder = 'processed/not_fft' if not is_fft else 'processed/is_fft'
-        processed_save_path = os.path.join(cache_path, sub_folder)
+        processed_save_path = os.path.join(cache_path, sub_folder, foldername)
+        os.makedirs(processed_save_path, exist_ok=True)
 
-        if not os.path.exists(os.path.join(processed_save_path, f"{foldername}/val.csv")):
-            os.makedirs(os.path.join(processed_save_path, f"{foldername}"), exist_ok=True)
+        if not os.path.exists(os.path.join(processed_save_path, "val.csv")):
 
             # Now we have the text encoded to tokens
             train_dataset = load_dataset(*which, split='train', cache_dir=cache_path)
@@ -675,23 +750,24 @@ class PrepDataset:
             self.logger.info(f'Data sample for train: {train_dataset[0]}')
             self.logger.info(f'Data sample for validation: {valid_dataset[0]}')
 
-            train_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/train.csv"))
-            valid_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/val.csv"))
+            train_dataset.to_csv(os.path.join(processed_save_path, f"train.csv"))
+            valid_dataset.to_csv(os.path.join(processed_save_path, f"val.csv"))
         else:
             self.logger.info(f'Decoding was not performed as cache was found')
 
         # This is the completely unseen final test
-        if not os.path.exists(os.path.join(processed_save_path, f"{foldername}/ftest.csv")):
+        if not os.path.exists(os.path.join(processed_save_path, f"ftest.csv")):
             try:
                 test_dataset = load_dataset(*which, split='test', cache_dir=cache_path)
-                # Remove the columns we do not need
-                remove_columns = [x for x in test_dataset.column_names if x not in ['id', 'idx', 'label']]
-                test_dataset = test_dataset.map(encoder, remove_columns=remove_columns, num_proc=self.num_proc)
-                test_dataset.to_csv(os.path.join(processed_save_path, f"{foldername}/ftest.csv"))
             except ValueError:
-                pass
+                test_dataset = load_dataset(*which, split='test_mismatched', cache_dir=cache_path)
 
-        return led
+            # Remove the columns we do not need
+            remove_columns = [x for x in test_dataset.column_names if x not in ['id', 'idx', 'label']]
+            test_dataset = test_dataset.map(encoder, remove_columns=remove_columns, num_proc=self.num_proc)
+            test_dataset.to_csv(os.path.join(processed_save_path, "ftest.csv"))
+
+        return led, processed_save_path
 
     def count_words(self, filepath):
 
@@ -719,22 +795,12 @@ class PrepDataset:
         self.counts = counts
 
     def load_to_memory(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
-                       is_fft: bool = False):
+                       is_fft: bool = False, folderpath: str = ''):
         """
 
         Returns:
         """
         self.logger.info(f'Loading {which} to memory')
-
-        if not isinstance(which, tuple):
-            which = (which,)
-
-        # This is the folder where the data will go
-        which_str = ''.join(f'{x}-' for x in which)
-        foldername = which_str
-
-        sub_folder = 'processed/not_fft' if not is_fft else 'processed/is_fft'
-        processed_save_path = os.path.join(cache_path, sub_folder)
 
         # Load the dataset from CSV
         tfsplits = {}
@@ -745,8 +811,7 @@ class PrepDataset:
         tokenize = partial(self.tokenize, self.tokenizer, False, is_fft)
         for split in ['train', 'val']:
             # Load the data from CSV and tokenize
-            splits[split] = Dataset.from_csv(os.path.join(processed_save_path, f"{foldername}/{split}.csv"),
-                                             cache_dir=cache_path)
+            splits[split] = Dataset.from_csv(os.path.join(folderpath, f"{split}.csv"), cache_dir=cache_path)
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
@@ -766,11 +831,11 @@ class PrepDataset:
                 batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
                 shuffle=True)
 
-        self.count_words(os.path.join(processed_save_path, f"{foldername}/val.csv"))
+        self.count_words(os.path.join(folderpath, "val.csv"))
         return tfsplits, splits, counts
 
     def load(self, which: Union[str, tuple], batch_size: int = 10, as_batches: bool = False, cache_path: str = None,
-             is_fft: bool = False, encoder_max_length: int = 250):
+             is_fft: bool = False, encoder_max_length: int = 250, token_equalize: bool = False):
         """
 
         Args:
@@ -780,18 +845,19 @@ class PrepDataset:
             cache_path: Location to save/load cached files
             is_fft: Add taskname to task
             encoder_max_length: Max token length for encoder
+            token_equalize: Equalize token lengths?
         Returns:
 
         """
 
         # Ensure the dataset exists and is processed
-        led = self.encode_and_save(which, cache_path, is_fft=is_fft)
+        led, folderpath = self.encode_and_save(which, cache_path, is_fft=is_fft, token_equalize=token_equalize)
 
         constants.ENCODER_MAX_LEN = encoder_max_length
         if as_batches:
             raise NotImplementedError('Loading as batches is not implemented')
         else:
-            tfsplits, splits, counts = self.load_to_memory(which, batch_size, cache_path, is_fft=is_fft)
-
+            tfsplits, splits, counts = \
+                self.load_to_memory(which, batch_size, cache_path, is_fft=is_fft, folderpath=folderpath)
         self.led = led
-        return tfsplits, splits, counts, led
+        return tfsplits, splits, counts

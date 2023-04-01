@@ -10,8 +10,8 @@ import tensorflow as tf
 from typing import Union
 from utils import constants
 from utils.constants import Tasks
-from utils.data import PrepDataset
 from utils.metric import evaluate_metric
+from utils.data import PrepDataset, LabelEncodeDecode
 from utils.model import get_model, model_history_to_dlog, PromptCallback, LinearRampScheduler, BatchLossCallback
 
 os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
@@ -93,30 +93,35 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
     return filen, cur_epoch, filenames
 
 
-def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_tag):
+def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_tag, token_equalize):
     """
 
     Returns: A tag for this unique model configuration
 
     """
+    led = LabelEncodeDecode(which_data, do_equal=token_equalize)
+
     tag = model_checkpoint + '-' + which_model + '-'
-    tag += "".join(f'{x}-' for x in which_data)
-    tag += optimizer_tag
+    tag += led.get_tag()
+
+    tag += '-' + optimizer_tag
     return tag
 
 
-def create_prompt_tag(model_checkpoint, model_name, which_data):
+def create_prompt_tag(model_checkpoint, model_name, which_data, token_equalize):
     """
 
     Returns: A tag for this unique model configuration
 
     """
+    led = LabelEncodeDecode(which=which_data, do_equal=token_equalize)
+
     tag = model_checkpoint + '-' + model_name + '-'
-    tag += "".join(f'{x}-' for x in which_data)
-    return tag[:-1]
+    tag += led.get_tag()
+    return tag
 
 
-def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint, which_data):
+def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint, which_data, token_equalize):
     """
     Save the prompt
 
@@ -126,7 +131,7 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         checkpoint_filepath: Filepath to store the prompts
         which_model: Prompts are only saved for the soft model
         which_data: Which data was fit for the model
-
+        token_equalize: Whether equal or unequal token sizes were used
     Returns:
 
     """
@@ -139,7 +144,7 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         os.makedirs(filepath, exist_ok=True)
 
         # Only the model checkpoint
-        prompt_tag = create_prompt_tag(model_checkpoint, which_model, which_data)
+        prompt_tag = create_prompt_tag(model_checkpoint, which_model, which_data, token_equalize)
         model.save_prompt(os.path.join(filepath, 'soft-prompt-' + prompt_tag))
 
         return prompt_tag
@@ -147,7 +152,8 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         return ""
 
 
-def _load_soft_prompt(model, which_model, prompt_model, checkpoint_filepath, model_checkpoint, which_data):
+def _load_soft_prompt(model, which_model, prompt_model, checkpoint_filepath, model_checkpoint, which_data,
+                      token_equalize):
     """
     Save the prompt
 
@@ -158,6 +164,7 @@ def _load_soft_prompt(model, which_model, prompt_model, checkpoint_filepath, mod
         which_model: Prompts are only saved for the soft model
         prompt_model: Model for which teh prompt is to be laoded
         which_data: Which data was fit for the model
+        token_equalize: Equalize tokens
     Returns:
 
     """
@@ -172,7 +179,7 @@ def _load_soft_prompt(model, which_model, prompt_model, checkpoint_filepath, mod
         os.makedirs(checkpoint_filepath, exist_ok=True)
 
         # Only the model checkpoint
-        prompt_tag = create_prompt_tag(model_checkpoint, prompt_model, which_data)
+        prompt_tag = create_prompt_tag(model_checkpoint, prompt_model, which_data, token_equalize)
         model.load_prompt(os.path.join(checkpoint_filepath, 'soft-prompt-' + prompt_tag))
 
         return prompt_tag
@@ -262,16 +269,18 @@ def _get_config(model_config):
         prompt_model_checkpoint = prompt_specs['model_checkpoint']
         prompt_which_data = prompt_specs['which_data']
         prompt_which_model = prompt_specs['which_model']
+        prompt_token_equalize = prompt_specs['token_equalize']
     else:
         prompt_model_checkpoint = ''
         prompt_which_data = ''
         prompt_which_model = ''
+        prompt_token_equalize = ''
 
     if model_config:
         raise KeyError(f'Unexpected keys {list(model_config.keys())} in model_config')
 
     return model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model, \
-        encoder_max_length
+        encoder_max_length, prompt_token_equalize
 
 
 def _log_gpu_usage(logger, prefix):
@@ -290,9 +299,10 @@ def _log_gpu_usage(logger, prefix):
     logger.info(f"{prefix}: {gpu_usage_str[:-1]}")
 
 
-def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int = 30,
+def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int = 30, token_equalize: bool = False,
                  which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
-                 checkpoint_filepath: str = None, debug: bool = False, prefix='', force_run: bool = False):
+                 checkpoint_filepath: str = None, debug: bool = False, prefix='', force_run: bool = False
+                 ):
     """
 
     Args:
@@ -311,11 +321,11 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
         force_run: Force a rerun even if a file exists
+        token_equalize: Equalize token lengths
 
     Returns:
 
     """
-    # wandb.init()
 
     if force_run:
         pass
@@ -326,7 +336,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
     # 1. Get and process inputs
     # Get inputs from model config
     model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model, \
-        encoder_max_length = _get_config(model_config)
+        encoder_max_length, prompt_token_equalize = _get_config(model_config)
     logger.info(f'LR optimization on checkpoint {model_checkpoint} of {prompt_which_model}')
 
     # Get model official name
@@ -334,7 +344,7 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
 
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
-    tag = _create_file_tag(model_checkpoint, official_name, which_data, "")
+    tag = _create_file_tag(model_checkpoint, official_name, which_data, "", token_equalize)
     if prefix:
         tag = prefix + '-' + tag
 
@@ -348,7 +358,8 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
     tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                             is_fft=is_fft, encoder_max_length=encoder_max_length)
+                                             is_fft=is_fft, encoder_max_length=encoder_max_length,
+                                             token_equalize=token_equalize)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # Increase the learning rate linearly within one training epoch
@@ -364,16 +375,15 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
         prompt_checkpoint_filepath = os.path.join(checkpoint_filepath, "..")
         # Load the soft prompt for this model
         prompt_tag = _load_soft_prompt(model, official_name, prompt_official_name, prompt_checkpoint_filepath,
-                                       prompt_model_checkpoint, prompt_which_data)
+                                       prompt_model_checkpoint, prompt_which_data, token_equalize=prompt_token_equalize)
         tag += '-softprompt-' + prompt_tag
-
     model.summary()
     _log_gpu_usage(logger, prefix="Model created")
 
     # 5. Train the model
     model_optimizer_callback = BatchLossCallback(logger=logger)
-    model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_optimizer_callback, ],
-              validation_data=tfsplits['val'], initial_epoch=start_epoch)
+    model.fit(tfsplits['train'], epochs=epochs, callbacks=[model_optimizer_callback, ], validation_data=tfsplits['val'],
+              initial_epoch=start_epoch)
     _log_gpu_usage(logger, prefix="Model fit")
 
     # Delete the model
@@ -387,8 +397,9 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
 
 
 def run_one_split(logger, model_config: dict = None, optimizer_params=None, epochs: int = 30,
-                  which_data: Union[str, tuple] = 'squad', batch_size: int = 4, cache_path: str = None,
-                  checkpoint_filepath: str = None, debug: bool = False, prefix='', force_run: bool = False):
+                  token_equalize: bool = False, which_data: Union[str, tuple] = 'squad', batch_size: int = 4,
+                  cache_path: str = None, checkpoint_filepath: str = None, debug: bool = False, prefix='',
+                  force_run: bool = False):
     """
 
     Args:
@@ -399,6 +410,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
                                'soft' -> soft prompt is tuned
                                'library' -> library of soft prompts
         epochs: Integer
+        token_equalize: Equalize token lengths
         optimizer_params: {'optimizer': <Object of optimizer class or None to use default>, 'tag': <text description>}
         which_data: Which benchmark data source we are fine-tuning the data to ('squad', ), ('super_glue', 'boolq'), ..
         batch_size: Number of rows to use per batch
@@ -417,7 +429,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     # 1. Get and process inputs
     # Get inputs from model config
     model_checkpoint, which_model, prompt_model_checkpoint, prompt_which_data, prompt_which_model, \
-        encoder_max_length = _get_config(model_config)
+        encoder_max_length, prompt_token_equalize = _get_config(model_config)
 
     # Get the optimizer specifications
     optimizer_params = {} if optimizer_params is None else optimizer_params
@@ -429,7 +441,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
 
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
-    tag = _create_file_tag(model_checkpoint, official_name, which_data, optimizer_tag)
+    tag = _create_file_tag(model_checkpoint, official_name, which_data, optimizer_tag, token_equalize)
     if prefix:
         tag = prefix + '-' + tag
 
@@ -448,8 +460,9 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     # Load the data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
-    tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                             is_fft=is_fft, encoder_max_length=encoder_max_length)
+    tfsplits, splits, counts = \
+        dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path, is_fft=is_fft,
+                   encoder_max_length=encoder_max_length, token_equalize=token_equalize)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # 4. Get the model
@@ -462,11 +475,8 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
         filepath = os.path.join(checkpoint_filepath, 'soft_prompt')
         # Load the soft prompt for this model
         prompt_tag = _load_soft_prompt(model, official_name, prompt_official_name, filepath, prompt_model_checkpoint,
-                                       prompt_which_data)
+                                       prompt_which_data, prompt_token_equalize)
         tag += '-softprompt-' + prompt_tag
-
-    # Initialize wandb for generalzied soft prompting
-    # wandb.init(project="gsp", notes="run one split", tags=[run_tag, official_name])
 
     # Display model summary
     model.summary()
@@ -475,7 +485,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     # 5. Train the model
     model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag)
     history = model.fit(tfsplits['train'], epochs=epochs,
-                        callbacks=[model_checkpoint_callback, ],  # wandb.keras.WandbMetricsLogger()],
+                        callbacks=[model_checkpoint_callback, ],
                         validation_data=tfsplits['val'], initial_epoch=start_epoch)
     _log_gpu_usage(logger, prefix="Model fit")
 
@@ -498,14 +508,14 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     # For evaluating the test metric, load the best model
     filen_best, start_epoch, all_files = _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen_best)
-    results = evaluate_metric(logger, tag, which_data, model_checkpoint, model, splits['val'], is_fft)
+    results = evaluate_metric(logger, tag, dprep, model_checkpoint, model, splits['val'], is_fft)
     _log_gpu_usage(logger, prefix="Model evaluated")
 
     # Append history before returning
     results['history'] = history
 
     # Save the soft prompts if this is a soft prompt model
-    _save_soft_prompt(model, official_name, checkpoint_filepath, model_checkpoint, which_data)
+    _save_soft_prompt(model, official_name, checkpoint_filepath, model_checkpoint, which_data, token_equalize)
 
     # Delete the model
     del model
@@ -558,7 +568,7 @@ def get_optimizer(optimizer_param):
 
 def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batch_size: Union[int, dict] = 4,
                   cache_path: str = None, checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue',
-                  one_task: str = None, prefix='', epochs: int = 30):
+                  one_task: str = None, epochs: int = 30, token_equalize: bool = False, prefix=''):
     """
 
     Args:
@@ -576,6 +586,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batc
         benchmark: Which benchmark to run glue or superglue
         debug: if True then eager model of evaluation is run, else graph mode
         one_task: Which superglue task to run
+        token_equalize: Equalize token lengths
         prefix: Prefix to add to the model names
 
     Returns:
@@ -618,7 +629,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batc
             # If it fails then carry on
             run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param, which_data=task,
                           batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                          debug=debug, prefix=prefix, epochs=epochs[task])
+                          debug=debug, prefix=prefix, epochs=epochs[task], token_equalize=token_equalize)
         except Exception as e:
             # Capture the exception and
             logger.exception(e)

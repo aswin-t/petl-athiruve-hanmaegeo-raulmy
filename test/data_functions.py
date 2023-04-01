@@ -19,12 +19,17 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
     """
 
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=constants.ENCODER_MAX_LEN)
-    pairs = [('true', 'false'), ('positive', 'negative'), ('entailment', 'not_entailment'),
-             ('unacceptable', 'acceptable'), ('equivalent', 'not_equivalent'),
-             ('duplicate', 'not_duplicate'), ('entailment', 'not_entailment', 'contradiction'),
+    pairs = [('true', 'false'), ('positive', 'negative'),
+             ('entailment', 'not_entailment'), ('entailment', 'neutral or contradiction'),
+             ('unacceptable', 'acceptable'),
+             ('equivalent', 'not_equivalent'), ('equivalent', 'different'),
+             ('duplicate', 'not_duplicate'), ('duplicate', 'different'),
+             ('entailment', 'not_entailment', 'contradiction'),
              ('absolutely positive', 'terribly negative'),
              ('absolute truth', 'terrible lie'),
              ('entailment', 'neutral', 'contradiction'),
+             ('implies', 'neutral', 'contradiction'),
+             ('follows', 'neutral', 'contradiction'),
              ('similar', 'different')
              ]
 
@@ -47,14 +52,10 @@ def text_encode_and_save():
     # Prepare the Dataset
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
 
-    # out = dprep.get(which=which_d, batch_size=100, cache_path=cp)
-    # whiches = (('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'), ('super_glue', 'wsc.fixed'),
-    #            ('super_glue', 'record'),  ('super_glue', 'multirc'),
-    #            ('super_glue', 'cb'), ('super_glue', 'copa'))
-    whiches = (('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
-               ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'stsb'), ('glue', 'wnli'))
-    for wo in whiches:
-        dprep.encode_and_save(wo, cache_path=cache_path)
+    for task in constants.Tasks()['glue'] + constants.Tasks()['super_glue']:
+        for token_equalize in [True, False]:
+            for is_fft in [True, False]:
+                dprep.encode_and_save(task, cache_path=cache_path, token_equalize=token_equalize, is_fft=is_fft)
 
 
 def compare_predictions():
@@ -77,5 +78,5 @@ def compare_predictions():
 
 if __name__ == '__main__':
     # compare_predictions()
-    check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
-    # text_encode_and_save()
+    # check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
+    text_encode_and_save()

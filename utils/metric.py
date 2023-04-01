@@ -55,16 +55,17 @@ def cleanup_predictions(predictions, references):
     return predictions
 
 
-def evaluate_metric(logger, tag, which, checkpoint, model, val_split, is_fft, batch_size=100):
+def evaluate_metric(logger, tag, dprep, checkpoint, model, val_split, is_fft, batch_size=100):
     """
 
     Args:
         logger: Logger object
         tag: Evaluation tag string
-        which: Which dataset are we evaluating
+        dprep: Which dataset are we evaluating
         model: Model object
         checkpoint: Tokenizer to use
         val_split: Validation split
+        dprep:
         batch_size: Size of batch to generate results
         is_fft: Is this a FFt run
     Returns:
@@ -75,12 +76,12 @@ def evaluate_metric(logger, tag, which, checkpoint, model, val_split, is_fft, ba
     tokenizer = AutoTokenizer.from_pretrained(checkpoint.replace('_-_', '/'),
                                               model_max_length=constants.ENCODER_MAX_LEN)
     tokenize = partial(PrepDataset.tokenize, tokenizer, True, is_fft)
-    led = LabelEncodeDecode(which)
+    led = dprep.led
 
-    if which[0] in ['super_glue', 'glue']:
-        metric = evaluate.load(*which)
+    if led.which[0] in ['super_glue', 'glue']:
+        metric = evaluate.load(*led.which)
     else:
-        raise ValueError(f'Unsupported metric type: {which}')
+        raise ValueError(f'Unsupported metric type: {led.which}')
 
     # These are the questions we want answered
     # idx = [x['idx'] for x in val_split]

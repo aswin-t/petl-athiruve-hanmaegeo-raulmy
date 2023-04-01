@@ -10,7 +10,7 @@ os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/lib/cuda/'
 
 
 def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_filepath: str, debug: bool = False,
-              prefix='', batch_size=None, epochs=None):
+              prefix='', batch_size=None, epochs=None, token_equalize=False):
     """
 
     Args:
@@ -26,6 +26,7 @@ def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_
         debug: if True then eager model of evaluation is run, else graph mode
         prefix: Prefix to add to the model names
         batch_size: Training batch size
+        token_equalize: Equalize token lengths
     Returns:
 
     """
@@ -42,10 +43,11 @@ def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_
     #  Run the superglue benchmark
     run_benchmark(logger, model_config=model_config, optimizer_params=optimizer_params, batch_size=batch_size,
                   cache_path=cache_path, checkpoint_filepath=checkpoint_filepath, debug=debug, benchmark=benchmark,
-                  one_task=None, prefix=prefix, epochs=epochs)
+                  one_task=None, prefix=prefix, epochs=epochs, token_equalize=token_equalize)
 
 
-def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epochs=30, gpu=0, prefix='baseline_fft'):
+def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epochs=30, token_equalize=False,
+            prefix='baseline_fft', gpu=0):
     """
 
     Args:
@@ -55,6 +57,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
         epochs: Number of training epochs
         gpu: Which GPU to use
         prefix: Model prefix to use
+        token_equalize: Equalize token lengths
     Returns:
     """
     which_model = 'fft'
@@ -91,10 +94,12 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_lrs, debug=False,
-              prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
+              prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs,
+              token_equalize=token_equalize)
 
 
-def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epochs=None, gpu=0, prefix='baseline_soft'):
+def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epochs=None, token_equalize=False,
+             prefix='baseline_soft', gpu=0):
     """
 
     Args:
@@ -104,6 +109,7 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
         epochs: Number of training epochs
         gpu: Which GPU to use
         prefix: Prefix for run differentiate log files
+        token_equalize: Equalize token lengths
     Returns:
     """
 
@@ -130,7 +136,8 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params, debug=False,
-              prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs)
+              prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs,
+              token_equalize=token_equalize)
 
 
 if __name__ == '__main__':

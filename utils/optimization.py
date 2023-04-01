@@ -10,7 +10,7 @@ from utils.constants import Tasks
 from utils.train import run_lr_split, get_model_official_name, create_prompt_tag
 
 
-def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, output_path, batch_size):
+def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, output_path, batch_size, token_equalize):
     """
     Run a few tasks and return results
     Args:
@@ -21,6 +21,7 @@ def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, o
         optimizer_algo: Parameters for the optimizer
         batch_size:
         output_path:
+        token_equalize:
 
     Returns:
 
@@ -37,7 +38,7 @@ def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, o
     result = run_lr_split(logger, model_config=model_config, optimizer_algo=optimizer_algo,
                           which_data=which_data, batch_size=batch_size, cache_path=cache_path,
                           checkpoint_filepath=output_path, debug=debug,
-                          prefix=prefix, force_run=True)
+                          prefix=prefix, force_run=True, token_equalize=token_equalize)
 
     return result
 
@@ -197,7 +198,8 @@ def analyze_results(results, output_path, lower_range=5E-7, upper_range=10):
     return lrs
 
 
-def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, lower_range=5E-7, upper_range=10):
+def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, lower_range=5E-7, upper_range=10,
+                      token_equalize=False):
     """
 
     Returns:
@@ -263,7 +265,7 @@ def get_adamw_spt_lrs(model_checkpoint, which_model, source_config, batch_size, 
 
 
 def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, min_num_batches=50,
-                  lower_range=5E-7, upper_range=10):
+                  lower_range=5E-7, upper_range=10, token_equalize=False):
     """
 
     Returns:
@@ -307,7 +309,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
 
                 # Results from running one lr optimization loop
                 result = run_one(logger, model_checkpoint, which_model, task, optimizer_algo, output_path,
-                                 batch_size[task])
+                                 batch_size[task], token_equalize=token_equalize)
                 with open(filepath, 'wb') as outfi:
                     pickle.dump(result, outfi)
             else:
