@@ -137,7 +137,7 @@ class LabelEncodeDecode:
         tag = "".join(f'{x}-' for x in self.which)
         # Also add the answer format
         if self.has_versions:
-            tag += 'equal' if self.do_equal else 'unequal'
+            tag += 'equal-' if self.do_equal else 'unequal-'
 
         return tag[:-1]
 
@@ -682,7 +682,7 @@ class PrepDataset:
             tmp = str(example['answer']).lower()
         else:
             tmp = str(example['answer'])
-        decoder_inputs = tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN)['input_ids']
+        decoder_inputs = tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN+1)['input_ids']
 
         # Set up to return
         input_ids = encoder_inputs['input_ids'][0]

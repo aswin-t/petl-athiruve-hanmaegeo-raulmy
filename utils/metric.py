@@ -92,7 +92,7 @@ def evaluate_metric(logger, tag, dprep, checkpoint, model, val_split, is_fft, ba
     #  These are the predictions from the model
     text_predictions = []
     for batch in chunks(tokens, batch_size):
-        answers = model.generate(tf.stack(batch, axis=0), max_length=constants.DECODER_MAX_LEN)
+        answers = model.generate(tf.stack(batch, axis=0), max_length=constants.DECODER_MAX_LEN+1)
         # answers = model(tf.stack(batch, axis=0), training=False)
         for answer in answers.numpy().tolist():
             text_predictions.append(tokenizer.decode(answer, skip_special_tokens=True))

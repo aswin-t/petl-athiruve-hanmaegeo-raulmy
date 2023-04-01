@@ -1040,7 +1040,7 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         debug: If debug is True then model is run in eager model otherwise in graph mode
         logger: Logger for logging progress
         checkpoint_file: File to load checkpoint, if available
-        dprep: Data preparatio object
+        dprep: Data preparation object
 
     Returns:
     """
