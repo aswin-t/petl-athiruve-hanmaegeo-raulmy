@@ -145,8 +145,8 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
 
 if __name__ == '__main__':
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    # run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft_unequal',
-    #          token_equalize=False, gpu=0)
-    run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_fft_unequal',
-            token_equalize=False, gpu=0)
+    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft_unequal',
+             token_equalize=False, gpu=0)
+    # run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_fft_unequal',
+    #         token_equalize=False, gpu=0)
 
