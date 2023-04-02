@@ -10,8 +10,8 @@ COUNTS = {('glue', 'cola'): 8551, ('glue', 'mrpc'): 3668, ('glue', 'qnli'): 1047
           ('super_glue', 'wic'): 5428, ('super_glue', 'wsc.fixed'): 554, ('super_glue', 'multirc'): 27243,
           ('super_glue', 'cb'): 250, ('super_glue', 'copa'): 400}
 
-GLUE_TASKS = (('glue', 'mnli'), ('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
-              ('glue', 'rte'), ('glue', 'sst2'), ('glue', 'wnli'))
+GLUE_TASKS = (('glue', 'mnli'), ('glue', 'rte'), ('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
+              ('glue', 'sst2'), ('glue', 'wnli'))
 SUPERGLUE_TASKS = (('super_glue', 'cb'), ('super_glue', 'boolq'), ('super_glue', 'rte'), ('super_glue', 'wic'),
                    ('super_glue', 'multirc'), ('super_glue', 'copa'),  ('super_glue', 'wsc.fixed'),)
 TARGET_TASKS = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mrpc'), ('glue', 'sst2'), ('glue', 'mnli'))

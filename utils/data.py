@@ -63,7 +63,7 @@ class LabelEncodeDecode:
                     # Entailment is 4, neutral or contradiction is 3
                     constants.DECODER_MAX_LEN = 5
                 self.has_versions = True
-            if which[1] in ['wnli', ]:
+            elif which[1] in ['wnli', ]:
                 if not self.do_equal:
                     self.lookup = {0: 'not_entailment', 1: 'entailment', -1: 'test'}
                     # Entailment is 4, not_entailment is 5
