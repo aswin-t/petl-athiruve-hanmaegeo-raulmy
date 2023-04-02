@@ -5,7 +5,7 @@ import tensorflow as tf
 from functools import partial
 from transformers import AutoTokenizer
 from utils import constants
-from utils.data import LabelEncodeDecode, PrepDataset
+from utils.data import PrepDataset
 from sklearn.metrics import confusion_matrix, f1_score, balanced_accuracy_score, accuracy_score
 
 
@@ -92,7 +92,7 @@ def evaluate_metric(logger, tag, dprep, checkpoint, model, val_split, is_fft, ba
     #  These are the predictions from the model
     text_predictions = []
     for batch in chunks(tokens, batch_size):
-        answers = model.generate(tf.stack(batch, axis=0), max_length=constants.DECODER_MAX_LEN+1)
+        answers = model.generate(tf.stack(batch, axis=0), max_length=constants.DECODER_MAX_LEN)
         # answers = model(tf.stack(batch, axis=0), training=False)
         for answer in answers.numpy().tolist():
             text_predictions.append(tokenizer.decode(answer, skip_special_tokens=True))

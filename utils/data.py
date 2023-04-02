@@ -20,32 +20,32 @@ class LabelEncodeDecode:
                 if not self.do_equal:
                     self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
                     # Entailment is 4, not_entailment is 5
-                    constants.DECODER_MAX_LEN = 5
+                    constants.DECODER_MAX_LEN = 6
                 else:
                     self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
                     # Entailment is 4, neutral or contradiction is 3
-                    constants.DECODER_MAX_LEN = 4
+                    constants.DECODER_MAX_LEN = 5
                 self.has_versions = True
             elif which[1] in ['boolq', 'wic', 'wsc.fixed', 'multirc']:
                 self.lookup = {0: 'false', 1: 'true', -1: 'test'}
                 # True and False are both 1
-                constants.DECODER_MAX_LEN = 1
+                constants.DECODER_MAX_LEN = 2
                 self.has_versions = False
             elif which[1] == 'cb':
                 if not self.do_equal:
                     self.lookup = {0: 'entailment', 1: 'contradiction', 2: 'neutral', -1: 'test'}
                     # Entailment is 4, contradiction is 1 and neutral is 1
-                    constants.DECODER_MAX_LEN = 4
+                    constants.DECODER_MAX_LEN = 5
                 else:
                     # Make the three the same length
                     self.lookup = {0: 'implies', 1: 'contradiction', 2: 'neutral', -1: 'test'}
                     # Implies is 1, contradiction is 1 and neutral is 1
-                    constants.DECODER_MAX_LEN = 1
+                    constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] == 'copa':
                 self.lookup = {0: 'choice1', 1: 'choice2', -1: 'test'}
                 # choice1 and choice2  are 2 tokens long
-                constants.DECODER_MAX_LEN = 2
+                constants.DECODER_MAX_LEN = 3
                 self.has_versions = False
             else:
                 self.lookup = {}
@@ -57,51 +57,51 @@ class LabelEncodeDecode:
                 if not self.do_equal:
                     self.lookup = {0: 'entailment', 1: 'not_entailment', -1: 'test'}
                     # Entailment is 4, not_entailment is 5
-                    constants.DECODER_MAX_LEN = 5
+                    constants.DECODER_MAX_LEN = 6
                 else:
                     self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
                     # Entailment is 4, neutral or contradiction is 3
-                    constants.DECODER_MAX_LEN = 4
+                    constants.DECODER_MAX_LEN = 5
                 self.has_versions = True
             if which[1] in ['wnli', ]:
                 if not self.do_equal:
                     self.lookup = {0: 'not_entailment', 1: 'entailment', -1: 'test'}
                     # Entailment is 4, not_entailment is 5
-                    constants.DECODER_MAX_LEN = 5
+                    constants.DECODER_MAX_LEN = 6
                 else:
                     self.lookup = {0: 'neutral or contradiction', 1: 'entailment', -1: 'test'}
                     # Entailment is 4, neutral or contradiction is 3
-                    constants.DECODER_MAX_LEN = 4
+                    constants.DECODER_MAX_LEN = 5
                 self.has_versions = True
             elif which[1] in ['sst2', ]:
                 self.lookup = {0: 'negative', 1: 'positive', -1: 'test'}
                 # Negative and positive are both 1
-                constants.DECODER_MAX_LEN = 1
+                constants.DECODER_MAX_LEN = 2
                 self.has_versions = False
             elif which[1] in ['cola', ]:
                 self.lookup = {0: 'unacceptable', 1: 'acceptable', -1: 'test'}
                 # Acceptable and unacceptable are both 1
-                constants.DECODER_MAX_LEN = 1
+                constants.DECODER_MAX_LEN = 2
                 self.has_versions = False
             elif which[1] in ['mrpc', ]:
                 if not self.do_equal:
                     self.lookup = {0: 'equivalent', 1: 'not_equivalent', -1: 'test'}
                     # Equivalent is 1, not_equivalent is 5
-                    constants.DECODER_MAX_LEN = 5
+                    constants.DECODER_MAX_LEN = 6
                 else:
                     self.lookup = {0: 'equivalent', 1: 'different', -1: 'test'}
                     # Equivalent and different are 1
-                    constants.DECODER_MAX_LEN = 1
+                    constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] in ['qqp', ]:
                 if not self.do_equal:
                     self.lookup = {0: 'not_duplicate', 1: 'duplicate', -1: 'test'}
                     # Duplicate is 1 and not duplicate is 5
-                    constants.DECODER_MAX_LEN = 5
+                    constants.DECODER_MAX_LEN = 6
                 else:
                     self.lookup = {0: 'different', 1: 'duplicate', -1: 'test'}
                     # Duplicate and different are 1
-                    constants.DECODER_MAX_LEN = 1
+                    constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] in ['mnli', ]:
                 if not self.do_equal:
@@ -109,8 +109,8 @@ class LabelEncodeDecode:
                     # entailment is 4, contradiction is 1 and neutral is 1
                     constants.DECODER_MAX_LEN = 5
                 else:
-                    # implies is 1, contradiction is 1 and neutral is 1
                     self.lookup = {0: 'implies', 1: 'neutral', 2: 'contradiction', -1: 'test'}
+                    # implies is 1, contradiction is 1 and neutral is 1
                     constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             else:
@@ -682,7 +682,7 @@ class PrepDataset:
             tmp = str(example['answer']).lower()
         else:
             tmp = str(example['answer'])
-        decoder_inputs = tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN+1)['input_ids']
+        decoder_inputs = tokenizer(tmp, truncation=True, max_length=constants.DECODER_MAX_LEN)['input_ids']
 
         # Set up to return
         input_ids = encoder_inputs['input_ids'][0]
