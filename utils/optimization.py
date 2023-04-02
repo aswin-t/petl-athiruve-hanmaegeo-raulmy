@@ -29,7 +29,7 @@ def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, o
 
     debug = True
     prefix = 'optimizer'
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': 1}
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
 
     cache_path = os.path.join(os.path.dirname(__file__), "../cache")
 
@@ -38,7 +38,7 @@ def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, o
     result = run_lr_split(logger, model_config=model_config, optimizer_algo=optimizer_algo,
                           which_data=which_data, batch_size=batch_size, cache_path=cache_path,
                           checkpoint_filepath=output_path, debug=debug,
-                          prefix=prefix, force_run=True, token_equalize=token_equalize)
+                          prefix=prefix, force_run=True, token_equalize=token_equalize, epochs=1)
 
     return result
 
