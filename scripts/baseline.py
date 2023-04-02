@@ -88,8 +88,8 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
             optimizer_lrs = pickle.load(infi)
         optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
     except FileNotFoundError:
-        optimizer_lrs = {task: 1E-6 for task in tasks}
-        # raise FileNotFoundError('Was optimization run to get learning rates?')
+        # optimizer_lrs = {task: 1E-6 for task in tasks}
+        raise FileNotFoundError('Was optimization run to get learning rates?')
 
     # Benchmark of target signifies target tasks
     optimizer_params = {task: {'learning_rate': optimizer_lrs[task], 'weight_decay': 1E-4,
