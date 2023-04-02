@@ -127,7 +127,7 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
 
 
 def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
-               epochs=None, gpu=0, optimizer_param=None, encoder_max_length=None):
+               epochs=None, gpu=0, optimizer_param=None, encoder_max_length=None, token_equalize=False):
     """
 
     Args:
@@ -140,6 +140,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
         task:
         optimizer_param:
         encoder_max_length: Max length to encode the inputs
+        token_equalize: Equalize token size
 
     Returns:
     """
@@ -175,13 +176,13 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     optimizer_param_ = get_optimizer(optimizer_param)
     run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param_, which_data=task,
                   batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                  debug=True, prefix=prefix, epochs=epochs)
+                  debug=True, prefix=prefix, epochs=epochs, token_equalize=token_equalize)
 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
     # hyperparameter(prefix='betas', model_checkpoint=mcp, max_batch_size=32, task=('super_glue', 'wic'), gpu=0,
     #                epochs=50)
-    experiment(prefix='encoder_length', model_checkpoint=mcp, max_batch_size=32, task=('glue', 'mnli'),
-               gpu=0, epochs=1, encoder_max_length=300,
+    experiment(prefix='test1', model_checkpoint=mcp, max_batch_size=32, task=('glue', 'mrpc'),
+               gpu=1, encoder_max_length=None, token_equalize=True, epochs=1,
                optimizer_param={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})

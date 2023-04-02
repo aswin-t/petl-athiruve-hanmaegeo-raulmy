@@ -30,7 +30,8 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
              ('entailment', 'neutral', 'contradiction'),
              ('implies', 'neutral', 'contradiction'),
              ('follows', 'neutral', 'contradiction'),
-             ('similar', 'different')
+             ('similar', 'different'),
+             ('zero', 'one', 'two', 'three')
              ]
 
     for pair in pairs:
@@ -78,5 +79,5 @@ def compare_predictions():
 
 if __name__ == '__main__':
     # compare_predictions()
-    # check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
-    text_encode_and_save()
+    check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
+    # text_encode_and_save()

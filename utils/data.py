@@ -22,15 +22,22 @@ class LabelEncodeDecode:
                     # Entailment is 4, not_entailment is 5
                     constants.DECODER_MAX_LEN = 6
                 else:
-                    self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
+                    # self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
                     # Entailment is 4, neutral or contradiction is 3
-                    constants.DECODER_MAX_LEN = 5
+                    # constants.DECODER_MAX_LEN = 5
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] in ['boolq', 'wic', 'wsc.fixed', 'multirc']:
-                self.lookup = {0: 'false', 1: 'true', -1: 'test'}
-                # True and False are both 1
-                constants.DECODER_MAX_LEN = 2
-                self.has_versions = False
+                if not self.do_equal:
+                    self.lookup = {0: 'false', 1: 'true', -1: 'test'}
+                    # True and False are both 1
+                    constants.DECODER_MAX_LEN = 2
+                    self.has_versions = False
+                else:
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
+                self.has_versions = True
             elif which[1] == 'cb':
                 if not self.do_equal:
                     self.lookup = {0: 'entailment', 1: 'contradiction', 2: 'neutral', -1: 'test'}
@@ -38,15 +45,21 @@ class LabelEncodeDecode:
                     constants.DECODER_MAX_LEN = 5
                 else:
                     # Make the three the same length
-                    self.lookup = {0: 'implies', 1: 'contradiction', 2: 'neutral', -1: 'test'}
+                    # self.lookup = {0: 'implies', 1: 'contradiction', 2: 'neutral', -1: 'test'}
                     # Implies is 1, contradiction is 1 and neutral is 1
+                    # constants.DECODER_MAX_LEN = 2
+                    self.lookup = {0: 'zero', 1: 'one', 2: 'two', -1: 'test'}
                     constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] == 'copa':
-                self.lookup = {0: 'choice1', 1: 'choice2', -1: 'test'}
-                # choice1 and choice2  are 2 tokens long
-                constants.DECODER_MAX_LEN = 3
-                self.has_versions = False
+                if not self.do_equal:
+                    self.lookup = {0: 'choice1', 1: 'choice2', -1: 'test'}
+                    # choice1 and choice2  are 2 tokens long
+                    constants.DECODER_MAX_LEN = 3
+                else:
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
+                self.has_versions = True
             else:
                 self.lookup = {}
                 # This is a longer answer and requires 50
@@ -59,9 +72,11 @@ class LabelEncodeDecode:
                     # Entailment is 4, not_entailment is 5
                     constants.DECODER_MAX_LEN = 6
                 else:
-                    self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
+                    # self.lookup = {0: 'entailment', 1: 'neutral or contradiction', -1: 'test'}
                     # Entailment is 4, neutral or contradiction is 3
-                    constants.DECODER_MAX_LEN = 5
+                    # constants.DECODER_MAX_LEN = 5
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] in ['wnli', ]:
                 if not self.do_equal:
@@ -69,28 +84,43 @@ class LabelEncodeDecode:
                     # Entailment is 4, not_entailment is 5
                     constants.DECODER_MAX_LEN = 6
                 else:
-                    self.lookup = {0: 'neutral or contradiction', 1: 'entailment', -1: 'test'}
+                    # self.lookup = {0: 'neutral or contradiction', 1: 'entailment', -1: 'test'}
                     # Entailment is 4, neutral or contradiction is 3
-                    constants.DECODER_MAX_LEN = 5
+                    # constants.DECODER_MAX_LEN = 5
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] in ['sst2', ]:
-                self.lookup = {0: 'negative', 1: 'positive', -1: 'test'}
-                # Negative and positive are both 1
-                constants.DECODER_MAX_LEN = 2
-                self.has_versions = False
+                if not self.do_equal:
+                    self.lookup = {0: 'negative', 1: 'positive', -1: 'test'}
+                    # Negative and positive are both 1
+                    constants.DECODER_MAX_LEN = 2
+                else:
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
+
+                self.has_versions = True
             elif which[1] in ['cola', ]:
-                self.lookup = {0: 'unacceptable', 1: 'acceptable', -1: 'test'}
-                # Acceptable and unacceptable are both 1
-                constants.DECODER_MAX_LEN = 2
-                self.has_versions = False
+                if not self.do_equal:
+                    self.lookup = {0: 'unacceptable', 1: 'acceptable', -1: 'test'}
+                    # Acceptable and unacceptable are both 1
+                    constants.DECODER_MAX_LEN = 2
+
+                else:
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
+                    constants.DECODER_MAX_LEN = 2
+
+                self.has_versions = True
             elif which[1] in ['mrpc', ]:
                 if not self.do_equal:
                     self.lookup = {0: 'equivalent', 1: 'not_equivalent', -1: 'test'}
                     # Equivalent is 1, not_equivalent is 5
                     constants.DECODER_MAX_LEN = 6
                 else:
-                    self.lookup = {0: 'equivalent', 1: 'different', -1: 'test'}
+                    # self.lookup = {0: 'equivalent', 1: 'different', -1: 'test'}
                     # Equivalent and different are 1
+                    # constants.DECODER_MAX_LEN = 2
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
                     constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] in ['qqp', ]:
@@ -99,18 +129,22 @@ class LabelEncodeDecode:
                     # Duplicate is 1 and not duplicate is 5
                     constants.DECODER_MAX_LEN = 6
                 else:
-                    self.lookup = {0: 'different', 1: 'duplicate', -1: 'test'}
+                    # self.lookup = {0: 'different', 1: 'duplicate', -1: 'test'}
                     # Duplicate and different are 1
+                    # constants.DECODER_MAX_LEN = 2
+                    self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
                     constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             elif which[1] in ['mnli', ]:
                 if not self.do_equal:
-                    self.lookup = {0: 'entailment', 1: 'neutral', 2: 'contradiction',  -1: 'test'}
+                    self.lookup = {0: 'entailment', 1: 'neutral', 2: 'contradiction', -1: 'test'}
                     # entailment is 4, contradiction is 1 and neutral is 1
                     constants.DECODER_MAX_LEN = 5
                 else:
-                    self.lookup = {0: 'implies', 1: 'neutral', 2: 'contradiction', -1: 'test'}
+                    # self.lookup = {0: 'implies', 1: 'neutral', 2: 'contradiction', -1: 'test'}
                     # implies is 1, contradiction is 1 and neutral is 1
+                    # constants.DECODER_MAX_LEN = 2
+                    self.lookup = {0: 'zero', 1: 'one', 2: 'two', -1: 'test'}
                     constants.DECODER_MAX_LEN = 2
                 self.has_versions = True
             else:
@@ -790,12 +824,12 @@ class PrepDataset:
             counts = counts[1:]
 
         # Convert counts to probability
-        counts = counts/np.sum(counts)
+        counts = counts / np.sum(counts)
         self.words = words
         self.counts = counts
 
-    def load_to_memory(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
-                       is_fft: bool = False, folderpath: str = ''):
+    def load_to_memory_(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
+                        is_fft: bool = False, folderpath: str = ''):
         """
 
         Returns:
@@ -823,11 +857,56 @@ class PrepDataset:
                                                      load_from_cache_file=False)
             after_filter = len(tfsplits[split])
             self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
-                             f'after {after_filter} lost {((before_filter-after_filter)/before_filter)*100}%')
+                             f'after {after_filter} lost {((before_filter - after_filter) / before_filter) * 100}%')
             counts[split] = len(splits[split])
 
             # Convert to TensorFlow dataset
             tfsplits[split] = tfsplits[split].to_tf_dataset(
+                batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
+                shuffle=True)
+
+        self.count_words(os.path.join(folderpath, "val.csv"))
+        return tfsplits, splits, counts
+
+    def load_to_memory(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
+                       is_fft: bool = False, folderpath: str = ''):
+        """
+
+        Returns:
+        """
+        self.logger.info(f'Loading {which} to memory')
+
+        # Load the dataset from CSV
+        tfsplits = {}
+        splits = {}
+        counts = {}
+
+        # Create a partial function with tokenize.
+        tokenize = partial(self.tokenize, self.tokenizer, False, is_fft)
+        for split in ['train', 'val']:
+            # Load the data from CSV and tokenize
+            splits[split] = Dataset.from_csv(os.path.join(folderpath, f"{split}.csv"), cache_dir=cache_path)
+            self.logger.info(f'Data sample for {split}: {splits[split][0]}')
+
+            # Convert text to tokens
+            splits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=False)
+            before_filter = len(splits[split])
+
+            # Filter truncated examples
+            splits[split] = splits[split].filter(lambda example: not example['truncated'],
+                                                 load_from_cache_file=False)
+            after_filter = len(splits[split])
+            self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
+                             f'after {after_filter} lost {((before_filter - after_filter) / before_filter) * 100}%')
+            counts[split] = len(splits[split])
+
+            if split == 'val':
+                tts = splits[split].train_test_split(test_size=0.4)
+                splits[split] = tts['train']
+                splits['test'] = tts['test']
+
+            # Convert to TensorFlow dataset
+            tfsplits[split] = splits[split].to_tf_dataset(
                 batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
                 shuffle=True)
 

@@ -796,6 +796,7 @@ class PETLSoftPrompt(TFPromptT5ForConditionalGeneration, abc.ABC):
 
         # TODO - athiruve
         # tf.print(y[0, :], tf.math.argmax(logits, axis=-1)[0, :])
+        # tf.print(tf.math.reduce_min(logits), tf.math.reduce_max(logits))
 
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, logits)

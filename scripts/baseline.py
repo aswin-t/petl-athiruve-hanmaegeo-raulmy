@@ -61,12 +61,12 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
     Returns:
     """
     which_model = 'fft'
-    target_steps = 20000
+    target_steps = 30000
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
-    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model, 'epochs': epochs}
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
     checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
 
     # Ensure at least 50 batches
@@ -86,14 +86,17 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
         filepath = os.path.join(checkpoint_filepath, 'optimizer/lro-' + all_tasks_tag + '.p')
         with open(filepath, 'rb') as infi:
             optimizer_lrs = pickle.load(infi)
+        optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
     except FileNotFoundError:
-        raise FileNotFoundError('Was optimization run to get learning rates?')
+        optimizer_lrs = {task: 1E-6 for task in tasks}
+        # raise FileNotFoundError('Was optimization run to get learning rates?')
 
-    # Scale the learning rate by the number of epochs * number of batches per epoch
-    optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
+    # Benchmark of target signifies target tasks
+    optimizer_params = {task: {'learning_rate': optimizer_lrs[task], 'weight_decay': 1E-4,
+                               'beta_1': 0.8, 'beta_2': 0.999} for task in tasks}
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
-    run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_lrs, debug=False,
+    run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params, debug=False,
               prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs,
               token_equalize=token_equalize)
 
@@ -142,6 +145,8 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
 
 if __name__ == '__main__':
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft_unequal',
-             token_equalize=False, gpu=0)
-    # run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', epochs=30, prefix='baseline_fft')
+    # run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft_unequal',
+    #          token_equalize=False, gpu=0)
+    run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_fft_unequal',
+            token_equalize=False, gpu=0)
+

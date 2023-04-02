@@ -264,6 +264,7 @@ def _get_config(model_config):
     prompt_specs = check_config(model_config, 'prompt_transfer', default=None, required=False)
     encoder_max_length = check_config(model_config, 'encoder_max_length', default=constants.ENCODER_MAX_LEN,
                                       required=False)
+    encoder_max_length = constants.ENCODER_MAX_LEN if encoder_max_length is None else encoder_max_length
 
     if prompt_specs is not None:
         prompt_model_checkpoint = prompt_specs['model_checkpoint']
@@ -508,7 +509,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     # For evaluating the test metric, load the best model
     filen_best, start_epoch, all_files = _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen_best)
-    results = evaluate_metric(logger, tag, dprep, model_checkpoint, model, splits['val'], is_fft)
+    results = evaluate_metric(logger, tag, dprep, model_checkpoint, model, splits['test'], is_fft)
     _log_gpu_usage(logger, prefix="Model evaluated")
 
     # Append history before returning
