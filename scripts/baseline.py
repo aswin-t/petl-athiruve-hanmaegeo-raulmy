@@ -46,7 +46,7 @@ def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_
                   one_task=None, prefix=prefix, epochs=epochs, token_equalize=token_equalize)
 
 
-def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epochs=30, token_equalize=False,
+def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epochs=None, token_equalize=False,
             prefix='baseline_fft', gpu=0):
     """
 
