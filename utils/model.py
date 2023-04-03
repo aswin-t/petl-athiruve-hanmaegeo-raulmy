@@ -92,7 +92,10 @@ class BatchLossCallback(tf.keras.callbacks.Callback):
 
     def on_train_batch_end(self, batch, logs=None):
         # Get configuration from the optimizer
-        lr = self.model.optimizer.learning_rate(self._current_steps).numpy()
+        try:
+            lr = self.model.optimizer.learning_rate(self._current_steps).numpy()
+        except TypeError:
+            lr = self.model.optimizer.learning_rate.numpy()
         self.logger.info(f"{lr},{logs['loss']},{logs['accuracy']}")
         self.history['learning_rate'].append(lr)
         self.history['loss'].append(logs['loss'])
