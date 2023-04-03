@@ -8,7 +8,7 @@ from keras.optimizers.optimizer_experimental.adamw import AdamW
 from utils.log import create_logger
 from utils import constants
 from utils.constants import Tasks
-from utils.train import run_lr_split, get_model_official_name, create_prompt_tag
+from utils.train import run_lr_split
 
 
 def run_one(logger, model_checkpoint, which_model, which_data, optimizer_algo, output_path, batch_size, token_equalize):
@@ -94,7 +94,12 @@ def _fine_tuning_lr(x_, loss, der, idx):
     der = der[:idx + 1]
 
     # Index the lr lower than 0
-    idx = np.where(der > np.min(der)/100)[0][-1]
+    idx = np.where(np.flip(np.cumsum(np.flip(der) > 0) > 0))[0]
+    if idx.size == 0:
+        idx = -1
+    else:
+        idx = idx[-1]
+
     der = der[idx + 1:]
     x_ = x_[idx + 1:]
     loss = loss[idx + 1:]
@@ -276,6 +281,7 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    bm = (('glue', 'mrpc'), )
-    get_adamw_lrs(model_checkpoint=mcp, which_model='soft', benchmark=bm, max_batch_size=25,
-                  min_num_batches=50, lower_range=1E-6, upper_range=10, gpu=1)
+    # bm = (('glue', 'mrpc'), )
+    bm = 'glue'
+    get_adamw_lrs(model_checkpoint=mcp, which_model='fft', benchmark=bm, max_batch_size=25,
+                  min_num_batches=50, lower_range=1E-7, upper_range=-1, gpu=1)
