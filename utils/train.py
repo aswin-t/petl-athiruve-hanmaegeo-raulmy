@@ -358,9 +358,9 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
     # Load teh data to memory
     dprep = PrepDataset(logger=logger, checkpoint=model_checkpoint)
     is_fft = True if official_name == 'FullFineTune' else False
-    tfsplits, splits, counts, _ = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
-                                             is_fft=is_fft, encoder_max_length=encoder_max_length,
-                                             token_equalize=token_equalize)
+    tfsplits, splits, counts = dprep.load(which=which_data, batch_size=batch_size, cache_path=cache_path,
+                                          is_fft=is_fft, encoder_max_length=encoder_max_length,
+                                          token_equalize=token_equalize)
     _log_gpu_usage(logger, prefix="Dataset")
 
     # Increase the learning rate linearly within one training epoch
