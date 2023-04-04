@@ -1,4 +1,5 @@
 import os
+import math
 import pickle
 import random
 import tensorflow as tf
@@ -126,25 +127,25 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
                       debug=True, prefix=prefix, epochs=epochs)
 
 
-def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=100, min_num_batches=50, task=None,
-               epochs=None, gpu=0, optimizer_param=None, encoder_max_length=None, token_equalize=False):
+def experiment(prefix='experiment', model_checkpoint='t5-small', batch_size=32, task=None,
+               epochs=None, gpu=0, optimizer_param=None, encoder_max_length=None, token_equalize=False,
+               which_model='soft'):
     """
 
     Args:
         prefix:
         model_checkpoint: t5-small, t5-base
-        max_batch_size: Maximum batch size
-        min_num_batches: Minimum number of batches
+        batch_size: Batch size for experiment
         epochs: Number of training epochs
         gpu: Which GPU to use
         task:
         optimizer_param:
         encoder_max_length: Max length to encode the inputs
         token_equalize: Equalize token size
+        which_model:
 
     Returns:
     """
-    which_model = 'soft'
     target_steps = 30000
 
     default = {'learning_rate': 0.1, 'weight_decay': 1E-3}
@@ -164,18 +165,15 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', max_batch_size=
     logger = create_logger(checkpoint_filepath, filename=f'{prefix}-{model_checkpoint}-{which_model}-benchmark.log')
     logger.info(f'Performing {task} tuning')
 
-    # Ensure at least 50 batches
-    batch_size = {task: min(max_batch_size, int(constants.COUNTS[task] / min_num_batches))}
-
     if epochs is None:
-        epochs = int(target_steps/(constants.COUNTS[task]/batch_size[task]))
+        epochs = math.ceil(target_steps/(constants.COUNTS[task]/batch_size))
 
     # Get the batch size
     # Run one experiment and log all results
     # If it fails then carry on
     optimizer_param_ = get_optimizer(optimizer_param)
     run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param_, which_data=task,
-                  batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
+                  batch_size=batch_size, cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
                   debug=True, prefix=prefix, epochs=epochs, token_equalize=token_equalize)
 
 
@@ -183,6 +181,6 @@ if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
     # hyperparameter(prefix='betas', model_checkpoint=mcp, max_batch_size=32, task=('super_glue', 'wic'), gpu=0,
     #                epochs=50)
-    experiment(prefix='test1', model_checkpoint=mcp, max_batch_size=32, task=('glue', 'mrpc'),
+    experiment(prefix='test1', model_checkpoint=mcp, batch_size=32, task=('glue', 'mrpc'),
                gpu=1, encoder_max_length=None, token_equalize=True, epochs=1,
                optimizer_param={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})

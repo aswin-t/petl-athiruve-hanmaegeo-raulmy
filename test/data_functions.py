@@ -38,6 +38,7 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
         tokens = tokenizer(list(pair), padding=False).input_ids
         print(tokens)
         lengths = [len(x) for x in tokens]
+        print([[tokenizer.decode([x, ]) for x in y] for y in tokens])
         max_ = max(lengths)
         print(pair, max_, lengths)
 
