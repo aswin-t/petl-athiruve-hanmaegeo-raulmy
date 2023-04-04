@@ -76,7 +76,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
     # Maintaining approximately the same number of steps for all datasets
     # epochs = target_specs/steps per epoch
     if epochs is None:
-        epochs = {task:  int(target_steps/(constants.COUNTS[task]/batch_size)) for task in tasks}
+        epochs = {task:  math.ceil(target_steps/(constants.COUNTS[task]/batch_size)) for task in tasks}
     else:
         epochs = {task: epochs for task in tasks}
 
