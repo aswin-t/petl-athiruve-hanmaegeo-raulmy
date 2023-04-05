@@ -921,7 +921,7 @@ class PrepDataset:
             # Convert to TensorFlow dataset
             tfsplits[split] = splits[split].to_tf_dataset(
                 batch_size=batch_size,
-                columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask', 'sample_weights'],
+                columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
                 shuffle=True)
 
         self.count_words(os.path.join(folderpath, "val.csv"))

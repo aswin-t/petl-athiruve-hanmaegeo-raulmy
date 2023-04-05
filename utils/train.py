@@ -94,14 +94,6 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
                 cur_epoch = epoch
                 cur_val = val
 
-    if epochs is not None and cur_epoch >= epochs - 1:
-        print('Epochs: Model was previously run with equal or more epochs and completed. No need to run again')
-        if not force_run:
-            return None
-        else:
-            filen = ''
-            cur_epoch = -1
-
     cur_epoch += 1
     return filen, cur_epoch, filenames, completed_file
 
