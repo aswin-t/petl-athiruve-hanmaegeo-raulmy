@@ -1,6 +1,7 @@
 ENCODER_MAX_LEN = 250
 DECODER_MAX_LEN = 50
 NUM_SOFT_TOKENS = 20
+SEED = 42
 
 # Number of elements in each train set
 COUNTS = {('glue', 'cola'): 8551, ('glue', 'mrpc'): 3668, ('glue', 'qnli'): 104743, ('glue', 'qqp'): 363846,

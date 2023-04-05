@@ -849,12 +849,12 @@ class PrepDataset:
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
-            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=False)
+            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=True)
             before_filter = len(tfsplits[split])
 
             # Filter truncated examples
             tfsplits[split] = tfsplits[split].filter(lambda example: not example['truncated'],
-                                                     load_from_cache_file=False)
+                                                     load_from_cache_file=True)
             after_filter = len(tfsplits[split])
             self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
                              f'after {after_filter} lost {((before_filter - after_filter) / before_filter) * 100}%')
@@ -889,19 +889,21 @@ class PrepDataset:
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
-            splits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=False)
+            splits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=True)
             before_filter = len(splits[split])
 
             # Filter truncated examples
             splits[split] = splits[split].filter(lambda example: not example['truncated'],
-                                                 load_from_cache_file=False)
+                                                 load_from_cache_file=True)
             after_filter = len(splits[split])
             self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
                              f'after {after_filter} lost {((before_filter - after_filter) / before_filter) * 100}%')
             counts[split] = len(splits[split])
 
+            self.logger.info(f'Splitting with seed {constants.SEED}')
+            print(f'Splitting with seed {constants.SEED}')
             if split == 'val':
-                tts = splits[split].train_test_split(test_size=0.4)
+                tts = splits[split].train_test_split(test_size=0.4, seed=constants.SEED)
                 splits[split] = tts['train']
                 splits['test'] = tts['test']
 
