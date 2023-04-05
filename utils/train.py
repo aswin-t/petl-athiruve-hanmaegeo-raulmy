@@ -500,9 +500,6 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
                         callbacks=[model_checkpoint_callback, ],
                         validation_data=tfsplits['val'], initial_epoch=start_epoch)
     _log_gpu_usage(logger, prefix="Model fit")
-    # Mark this run as done
-    with open(completed_file, 'w'):
-        pass
 
     # Save the history to dlog file
     if history.history:
@@ -541,6 +538,10 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
 
     # Done with everything, so remove all unwanted files
     _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath)
+
+    # Mark this run as done
+    with open(completed_file, 'w'):
+        pass
 
     # Log GPU usage after everything is done
     _log_gpu_usage(logger, prefix="return")

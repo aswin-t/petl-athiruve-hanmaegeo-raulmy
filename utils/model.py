@@ -903,6 +903,7 @@ class FullFineTune(TFT5ForConditionalGeneration, abc.ABC):
 
         # What does X look like?
         x = data
+
         # Extract the Y as labels
         y = x["labels"]
 

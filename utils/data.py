@@ -105,7 +105,6 @@ class LabelEncodeDecode:
                     self.lookup = {0: 'unacceptable', 1: 'acceptable', -1: 'test'}
                     # Acceptable and unacceptable are both 1
                     constants.DECODER_MAX_LEN = 2
-
                 else:
                     self.lookup = {0: 'zero', 1: 'one', -1: 'test'}
                     constants.DECODER_MAX_LEN = 2
@@ -683,7 +682,7 @@ class PrepDataset:
         return {'question': new_example}
 
     @staticmethod
-    def tokenize(tokenizer, is_test, is_fft, example):
+    def tokenize(tokenizer, is_test, is_fft, token_counter, example):
         """
         Our objective is not only to tokenize the input but also to ensure that the after soft prompt is included, the
         embeddings that are removed are all paddings only
@@ -693,10 +692,10 @@ class PrepDataset:
             tokenizer: Instance of Autotokenizer initialized appropriately for the checkpoint
             is_test: Whether this is a test set we are working with
             example: Example to be tokenized
+            token_counter: List for counting tokens
 
         Returns:
         """
-
         text = example['question'].rstrip()
 
         # Now encode the tokens, this time we can be sure that there are at least NUM_SOFT_TOKENS worth of paddings
@@ -723,9 +722,15 @@ class PrepDataset:
         input_attention = encoder_inputs['attention_mask'][0]
 
         target_ids = decoder_inputs[:-1] + [0, ] * (constants.DECODER_MAX_LEN - len(decoder_inputs))
+
+        try:
+            token_counter[tuple(target_ids)] += 1
+        except KeyError:
+            token_counter[tuple(target_ids)] = 1
+
         target_attention = [1, ] * len(target_ids)
-        target_ids = tf.convert_to_tensor(target_ids, dtype=encoder_inputs['input_ids'].dtype)
-        target_attention = tf.convert_to_tensor(target_attention, dtype=encoder_inputs['input_ids'].dtype)
+        # target_ids = tf.convert_to_tensor(target_ids, dtype=encoder_inputs['input_ids'].dtype)
+        # target_attention = tf.convert_to_tensor(target_attention, dtype=encoder_inputs['input_ids'].dtype)
 
         return {'input_ids': input_ids, 'attention_mask': input_attention, 'labels': target_ids,
                 'decoder_attention_mask': target_attention, 'truncated': truncated}
@@ -828,45 +833,37 @@ class PrepDataset:
         self.words = words
         self.counts = counts
 
-    def load_to_memory_(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
-                        is_fft: bool = False, folderpath: str = ''):
-        """
+    @staticmethod
+    def _histo_normalize(token_counts: dict):
 
-        Returns:
-        """
-        self.logger.info(f'Loading {which} to memory')
+        independent_counts = {}
+        for tokens, count in token_counts.items():
+            for token in tokens:
+                try:
+                    independent_counts[token] += count
+                except KeyError:
+                    independent_counts[token] = count
 
-        # Load the dataset from CSV
-        tfsplits = {}
-        splits = {}
-        counts = {}
+        # What is the total count of tokens
+        total_count = np.sum(list(independent_counts.values()))
 
-        # Create a partial function with tokenize.
-        tokenize = partial(self.tokenize, self.tokenizer, False, is_fft)
-        for split in ['train', 'val']:
-            # Load the data from CSV and tokenize
-            splits[split] = Dataset.from_csv(os.path.join(folderpath, f"{split}.csv"), cache_dir=cache_path)
-            self.logger.info(f'Data sample for {split}: {splits[split][0]}')
+        # Normalize the tokens by the total token count
+        # More frequent tokens get a lower weight
+        independent_counts = {k: 1-(v / total_count) for k, v in independent_counts.items()}
 
-            # Convert text to tokens
-            tfsplits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=True)
-            before_filter = len(tfsplits[split])
+        # Token mapping
+        mapped_weights = {}
+        for tokens in token_counts.keys():
+            out = []
+            for token in tokens:
+                out.append(independent_counts[token])
+            mapped_weights[tokens] = out
 
-            # Filter truncated examples
-            tfsplits[split] = tfsplits[split].filter(lambda example: not example['truncated'],
-                                                     load_from_cache_file=True)
-            after_filter = len(tfsplits[split])
-            self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
-                             f'after {after_filter} lost {((before_filter - after_filter) / before_filter) * 100}%')
-            counts[split] = len(splits[split])
+        # Now normalize by class
+        for tokens in mapped_weights:
+            mapped_weights[tokens] /= np.sum(mapped_weights[tokens])
 
-            # Convert to TensorFlow dataset
-            tfsplits[split] = tfsplits[split].to_tf_dataset(
-                batch_size=batch_size, columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
-                shuffle=True)
-
-        self.count_words(os.path.join(folderpath, "val.csv"))
-        return tfsplits, splits, counts
+        return mapped_weights
 
     def load_to_memory(self, which: Union[str, tuple] = 'squad', batch_size: int = 10, cache_path: str = None,
                        is_fft: bool = False, folderpath: str = ''):
@@ -880,37 +877,51 @@ class PrepDataset:
         tfsplits = {}
         splits = {}
         counts = {}
+        token_counts = {'train': {}, 'val': {}}
+        weight_map = {}
 
         # Create a partial function with tokenize.
-        tokenize = partial(self.tokenize, self.tokenizer, False, is_fft)
         for split in ['train', 'val']:
+            # Create a tokenization function
+            tokenize = partial(self.tokenize, self.tokenizer, False, is_fft, token_counts[split])
+
             # Load the data from CSV and tokenize
             splits[split] = Dataset.from_csv(os.path.join(folderpath, f"{split}.csv"), cache_dir=cache_path)
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
-            splits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=True)
+            splits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=False)
             before_filter = len(splits[split])
 
             # Filter truncated examples
-            splits[split] = splits[split].filter(lambda example: not example['truncated'],
-                                                 load_from_cache_file=True)
+            splits[split] = splits[split].filter(lambda example: not example['truncated'], load_from_cache_file=False)
             after_filter = len(splits[split])
             self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
                              f'after {after_filter} lost {((before_filter - after_filter) / before_filter) * 100}%')
             counts[split] = len(splits[split])
 
+            # For the train split, keep a count of token
+            if split == 'train':
+                weight_map = self._histo_normalize(token_counts['train'])
+
+            # Seed for splitting validation and test
             self.logger.info(f'Splitting with seed {constants.SEED}')
-            print(f'Splitting with seed {constants.SEED}')
             if split == 'val':
+                print(f'Splitting with seed {constants.SEED}')
                 tts = splits[split].train_test_split(test_size=0.4, seed=constants.SEED)
                 splits[split] = tts['train']
                 splits['test'] = tts['test']
 
+            # We have a dictionary of weigths, create sample_weights using that
+            # splits[split] = \
+            #     splits[split].map(lambda example:
+            #                       {'sample_weights': weight_map[tuple(example['labels'])]},
+            #                       load_from_cache_file=False)
+
             # Convert to TensorFlow dataset
             tfsplits[split] = splits[split].to_tf_dataset(
                 batch_size=batch_size,
-                columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask'],
+                columns=['input_ids', 'attention_mask', 'labels', 'decoder_attention_mask', 'sample_weights'],
                 shuffle=True)
 
         self.count_words(os.path.join(folderpath, "val.csv"))

@@ -19,8 +19,8 @@ def check_tokenizer_lengths(checkpoint='t5-small'):
     """
 
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=constants.ENCODER_MAX_LEN)
-    pairs = [('true', 'false'), ('positive', 'negative'),
-             ('entailment', 'not_entailment'), ('entailment', 'neutral or contradiction'),
+    pairs = [('entailment', 'not_entailment'),
+             ('true', 'false'), ('positive', 'negative'),
              ('unacceptable', 'acceptable'),
              ('equivalent', 'not_equivalent'), ('equivalent', 'different'),
              ('duplicate', 'not_duplicate'), ('duplicate', 'different'),
@@ -73,7 +73,6 @@ def compare_predictions():
             else:
                 pred_.append(r)
         predictions = pred_
-
     print(predictions)
     return predictions
 
