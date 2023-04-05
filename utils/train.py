@@ -5,7 +5,6 @@ import re
 import copy
 import glob
 import time
-# import wandb
 import tensorflow as tf
 from typing import Union
 from utils import constants
@@ -70,10 +69,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
         print('Best: Model was previously run with equal or more epochs and completed. No need to run again')
         if not force_run:
             return None
-        else:
-            filen = ''
-            cur_epoch = 0
-            return filen, cur_epoch, filenames
+        print('Force run is set, continuing with loading checkpoint')
 
     if filenames:
         for filename in filenames:
@@ -95,6 +91,13 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
                 cur_val = val
 
     cur_epoch += 1
+
+    if force_run and filen:
+        print(f'Force run is set, model will not fit')
+        cur_epoch = epochs
+    else:
+        raise ValueError(f'Force run is set but no model file was found')
+
     return filen, cur_epoch, filenames, completed_file
 
 
@@ -580,7 +583,8 @@ def get_optimizer(optimizer_param):
 
 def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batch_size: Union[int, dict] = 4,
                   cache_path: str = None, checkpoint_filepath: str = None, debug: bool = False, benchmark='superglue',
-                  one_task: str = None, epochs: int = 30, token_equalize: bool = False, prefix=''):
+                  one_task: str = None, epochs: int = 30, token_equalize: bool = False, prefix='',
+                  force_run: bool = False):
     """
 
     Args:
@@ -600,6 +604,7 @@ def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batc
         one_task: Which superglue task to run
         token_equalize: Equalize token lengths
         prefix: Prefix to add to the model names
+        force_run: Force the run or not
 
     Returns:
 
@@ -641,7 +646,8 @@ def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batc
             # If it fails then carry on
             run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param, which_data=task,
                           batch_size=batch_size[task], cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                          debug=debug, prefix=prefix, epochs=epochs[task], token_equalize=token_equalize)
+                          debug=debug, prefix=prefix, epochs=epochs[task], token_equalize=token_equalize,
+                          force_run=force_run)
         except Exception as e:
             # Capture the exception and
             logger.exception(e)

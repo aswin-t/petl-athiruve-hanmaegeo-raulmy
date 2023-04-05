@@ -77,7 +77,38 @@ def compare_predictions():
     return predictions
 
 
+def histo_normalize(token_counts: dict):
+
+    # Count the frequency of tokens
+    independent_counts = {}
+    for tokens, count in token_counts.items():
+        for token in tokens:
+            try:
+                independent_counts[token] += 1
+            except KeyError:
+                independent_counts[token] = 1
+
+    # More frequent tokens get a lower weight
+    independent_counts = {k: 1/v for k, v in independent_counts.items()}
+
+    # Token mapping
+    mapped_weights = {}
+    for tokens in token_counts.keys():
+        out = []
+        for token in tokens:
+            out.append(independent_counts[token])
+        mapped_weights[tokens] = out
+
+    max_counts = max(list(token_counts.values()))
+    # Now normalize by class
+    for tokens, weights in mapped_weights.items():
+        mapped_weights[tokens] = [x * max_counts/token_counts[tokens] for x in weights]
+
+    return mapped_weights
+
+
 if __name__ == '__main__':
+    histo_normalize(token_counts={(7532, 4, 12, 7): 2249, (5756, 0, 0, 0, 0): 1149, (412, 4, 12, 7): 2249})
     # compare_predictions()
-    check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
+    # check_tokenizer_lengths(checkpoint='google/t5-base-lm-adapt')
     # text_encode_and_save()

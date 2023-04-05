@@ -836,20 +836,17 @@ class PrepDataset:
     @staticmethod
     def _histo_normalize(token_counts: dict):
 
+        # Count the frequency of tokens
         independent_counts = {}
         for tokens, count in token_counts.items():
             for token in tokens:
                 try:
-                    independent_counts[token] += count
+                    independent_counts[token] += 1
                 except KeyError:
-                    independent_counts[token] = count
+                    independent_counts[token] = 1
 
-        # What is the total count of tokens
-        total_count = np.sum(list(independent_counts.values()))
-
-        # Normalize the tokens by the total token count
         # More frequent tokens get a lower weight
-        independent_counts = {k: 1-(v / total_count) for k, v in independent_counts.items()}
+        independent_counts = {k: 1 / v for k, v in independent_counts.items()}
 
         # Token mapping
         mapped_weights = {}
@@ -859,9 +856,10 @@ class PrepDataset:
                 out.append(independent_counts[token])
             mapped_weights[tokens] = out
 
+        max_counts = max(list(token_counts.values()))
         # Now normalize by class
-        for tokens in mapped_weights:
-            mapped_weights[tokens] /= np.sum(mapped_weights[tokens])
+        for tokens, weights in mapped_weights.items():
+            mapped_weights[tokens] = [x * max_counts / token_counts[tokens] for x in weights]
 
         return mapped_weights
 
@@ -878,7 +876,7 @@ class PrepDataset:
         splits = {}
         counts = {}
         token_counts = {'train': {}, 'val': {}}
-        weight_map = {}
+        # weight_map = {}
 
         # Create a partial function with tokenize.
         for split in ['train', 'val']:
@@ -902,7 +900,8 @@ class PrepDataset:
 
             # For the train split, keep a count of token
             if split == 'train':
-                weight_map = self._histo_normalize(token_counts['train'])
+                # weight_map = self._histo_normalize(token_counts['train'])
+                pass
 
             # Seed for splitting validation and test
             self.logger.info(f'Splitting with seed {constants.SEED}')
