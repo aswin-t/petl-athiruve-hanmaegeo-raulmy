@@ -72,7 +72,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
             return None
         else:
             filen = ''
-            cur_epoch = -1
+            cur_epoch = 0
             return filen, cur_epoch, filenames
 
     if filenames:
@@ -211,7 +211,7 @@ def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath):
     logger.info(f'Best model file is {filen_best}, last epoch file is {filen_last}')
 
     # Remove these files
-    remove_files = [x for x in all_files if x not in [filen_last, filen_best]]
+    remove_files = [x for x in all_files if x not in [filen_last, filen_best] and 'done' not in x]
     for fname in remove_files:
         logger.info(f'Removing unwanted file {fname}')
         if os.path.isfile(fname):
