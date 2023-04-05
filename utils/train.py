@@ -66,9 +66,9 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
 
     # Look for all files with the tag
     completed_file = os.path.join(checkpoint_dir, tag + '.done')
-    if os.path.exists(completed_file):
+    if os.path.exists(completed_file) and epochs is not None:
+        print('Best: Model was previously run with equal or more epochs and completed. No need to run again')
         if not force_run:
-            print('Best: Model was previously run with equal or more epochs and completed. No need to run again')
             return None
         else:
             filen = ''
@@ -77,6 +77,9 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
 
     if filenames:
         for filename in filenames:
+            if 'done' in filename:
+                continue
+
             # This should match the expected value
             pat = strg_chk.search(filename)
             epoch = int(pat.group(1))

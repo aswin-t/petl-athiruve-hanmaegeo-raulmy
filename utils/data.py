@@ -890,11 +890,11 @@ class PrepDataset:
             self.logger.info(f'Data sample for {split}: {splits[split][0]}')
 
             # Convert text to tokens
-            splits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=False)
+            splits[split] = splits[split].map(tokenize, num_proc=self.num_proc, load_from_cache_file=True)
             before_filter = len(splits[split])
 
             # Filter truncated examples
-            splits[split] = splits[split].filter(lambda example: not example['truncated'], load_from_cache_file=False)
+            splits[split] = splits[split].filter(lambda example: not example['truncated'], load_from_cache_file=True)
             after_filter = len(splits[split])
             self.logger.info(f'Filter with token length {constants.ENCODER_MAX_LEN} before {before_filter} '
                              f'after {after_filter} lost {((before_filter - after_filter) / before_filter) * 100}%')

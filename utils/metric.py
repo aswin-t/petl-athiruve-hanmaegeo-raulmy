@@ -75,7 +75,7 @@ def evaluate_metric(logger, tag, dprep, checkpoint, model, val_split, is_fft, ba
     # Get the tokenizer for this data
     tokenizer = AutoTokenizer.from_pretrained(checkpoint.replace('_-_', '/'),
                                               model_max_length=constants.ENCODER_MAX_LEN)
-    tokenize = partial(PrepDataset.tokenize, tokenizer, True, is_fft)
+    tokenize = partial(PrepDataset.tokenize, tokenizer, True, is_fft, {})
     led = dprep.led
 
     if led.which[0] in ['super_glue', 'glue']:
