@@ -62,9 +62,19 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
 
     # Empty filename
     filen = ''
+    filenames = glob.glob(os.path.join(checkpoint_dir, tag) + '*')
 
     # Look for all files with the tag
-    filenames = glob.glob(os.path.join(checkpoint_dir, tag) + '*')
+    completed_file = os.path.join(checkpoint_dir, tag + '.done')
+    if os.path.exists(completed_file):
+        if not force_run:
+            print('Best: Model was previously run with equal or more epochs and completed. No need to run again')
+            return None
+        else:
+            filen = ''
+            cur_epoch = -1
+            return filen, cur_epoch, filenames
+
     if filenames:
         for filename in filenames:
             # This should match the expected value
@@ -82,7 +92,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
                 cur_val = val
 
     if epochs is not None and cur_epoch >= epochs - 1:
-        print('Model was previously run with equal or more epochs and completed. No need to run again')
+        print('Epochs: Model was previously run with equal or more epochs and completed. No need to run again')
         if not force_run:
             return None
         else:
@@ -90,7 +100,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
             cur_epoch = -1
 
     cur_epoch += 1
-    return filen, cur_epoch, filenames
+    return filen, cur_epoch, filenames, completed_file
 
 
 def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_tag, token_equalize):
@@ -201,8 +211,8 @@ def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath):
     # We need only two files:
     # a. The final epoch, in case we want to continue
     # b. The best validation score for model evaluations
-    filen_last, _, all_files = _load_checkpoint(tag, checkpoint_filepath, epochs=None)
-    filen_best, _, _ = _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
+    filen_last, _, all_files, _ = _load_checkpoint(tag, checkpoint_filepath, epochs=None)
+    filen_best, _, _, _ = _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
     logger.info(f'Best model file is {filen_best}, last epoch file is {filen_last}')
 
     # Remove these files
@@ -228,7 +238,8 @@ def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
 
     if official_name == 'FullFineTune':
         filepath = os.path.join(checkpoint_filepath, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
-        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=filepath, save_weights_only=True)
+        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+            filepath=filepath, save_weights_only=True, monitor='val_accuracy')
     elif official_name == 'PETLSoftPrompt':
         filepath = os.path.join(checkpoint_filepath, tag)
         model_checkpoint_callback = PromptCallback(filepath=filepath, best_is_lower=False)
@@ -452,7 +463,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
         _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath)
         return True
     else:
-        (filen, start_epoch, filenames) = ret
+        (filen, start_epoch, filenames, completed_file) = ret
 
     # Running this evaluation
     logger.info(f'This evaluation tag is {tag}')
@@ -489,7 +500,11 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
                         callbacks=[model_checkpoint_callback, ],
                         validation_data=tfsplits['val'], initial_epoch=start_epoch)
     _log_gpu_usage(logger, prefix="Model fit")
+    # Mark this run as done
+    with open(completed_file, 'w'):
+        pass
 
+    # Save the history to dlog file
     if history.history:
         model_history_to_dlog(logger, history.history, official_name)
         history = history.history
@@ -507,7 +522,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
 
     # 6. Evaluate metric
     # For evaluating the test metric, load the best model
-    filen_best, start_epoch, all_files = _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
+    filen_best, start_epoch, all_files, _ = _load_checkpoint(tag, checkpoint_filepath, load_best=True, epochs=None)
     model = get_model(official_name, model_checkpoint, debug, optimizer, logger, filen_best)
     results = evaluate_metric(logger, tag, dprep, model_checkpoint, model, splits['test'], is_fft)
     _log_gpu_usage(logger, prefix="Model evaluated")
