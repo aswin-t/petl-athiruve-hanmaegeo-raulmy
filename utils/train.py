@@ -239,7 +239,7 @@ def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
     if official_name == 'FullFineTune':
         filepath = os.path.join(checkpoint_filepath, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
         model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-            filepath=filepath, save_weights_only=True, monitor='val_accuracy')
+            filepath=filepath, save_weights_only=True, monitor='val_accuracy', save_best_only=True, mode='max')
     elif official_name == 'PETLSoftPrompt':
         filepath = os.path.join(checkpoint_filepath, tag)
         model_checkpoint_callback = PromptCallback(filepath=filepath, best_is_lower=False)
