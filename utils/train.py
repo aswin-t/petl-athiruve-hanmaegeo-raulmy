@@ -615,7 +615,12 @@ def run_benchmark(logger, model_config: dict = None, optimizer_params=None, batc
     prefix = prefix + '-' if prefix else prefix
 
     # These are the superglue tasks that we want to perform
-    tasks = Tasks()[benchmark]
+    if isinstance(benchmark, list):
+        tasks = benchmark
+    elif isinstance(benchmark, tuple):
+        raise TypeError('Benchmark can be string, glue, superglue or a list of tuples of task names')
+    else:
+        tasks = Tasks()[benchmark]
 
     # Convert batch size into a dictionary to pick a value for each task
     if isinstance(batch_size, int):
