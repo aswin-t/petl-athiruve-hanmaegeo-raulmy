@@ -75,7 +75,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
         for filename in filenames:
             if 'done' in filename:
                 continue
-
+            print(filename)
             # This should match the expected value
             pat = strg_chk.search(filename)
             epoch = int(pat.group(1))
@@ -96,6 +96,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
         print(f'Force run is set, model will not fit')
         cur_epoch = epochs
     elif force_run and not filen:
+        print(filen)
         raise ValueError(f'Force run is set but no model file was found')
 
     return filen, cur_epoch, filenames, completed_file

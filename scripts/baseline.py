@@ -73,8 +73,12 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
     checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
 
-    # Ensure at least 50 batches
-    tasks = Tasks()[benchmark]
+    if isinstance(benchmark, list):
+        tasks = benchmark
+    elif isinstance(benchmark, tuple):
+        raise TypeError('Benchmark can be string, glue, sueprglue or a list of tuples of task names')
+    else:
+        tasks = Tasks()[benchmark]
 
     # Maintaining approximately the same number of steps for all datasets
     # epochs = target_specs/steps per epoch
@@ -129,8 +133,12 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
     model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model}
     checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
 
-    # Ensure at least 50 batches
-    tasks = Tasks()[benchmark]
+    if isinstance(benchmark, list):
+        tasks = benchmark
+    elif isinstance(benchmark, tuple):
+        raise TypeError('Benchmark can be string, glue, sueprglue or a list of tuples of task names')
+    else:
+        tasks = Tasks()[benchmark]
 
     # Maintaining approximately the same number of steps for all datasets
     # epochs = target_specs/steps per epoch
@@ -149,7 +157,7 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
 
 
 if __name__ == '__main__':
-    constants.SEED = 43
+    constants.SEED = 42
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft_unequal_3',
-             token_equalize=False, gpu=0, force_run=False)
+    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft_equal_2',
+             token_equalize=True, gpu=0, force_run=True)

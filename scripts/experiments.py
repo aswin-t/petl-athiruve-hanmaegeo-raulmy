@@ -179,8 +179,6 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', batch_size=32, 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    # hyperparameter(prefix='betas', model_checkpoint=mcp, max_batch_size=32, task=('super_glue', 'wic'), gpu=0,
-    #                epochs=50)
-    experiment(prefix='test2', model_checkpoint=mcp, batch_size=32, task=('glue', 'mrpc'),
-               gpu=1, encoder_max_length=None, token_equalize=False, epochs=1,
-               optimizer_param={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})
+    experiment(prefix='rte_lr_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'rte'),
+               gpu=1, encoder_max_length=None, token_equalize=True, epochs=None,
+               optimizer_param={'learning_rate': 0.1, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})
