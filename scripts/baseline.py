@@ -50,7 +50,8 @@ def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_
 
 
 def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epochs=None, token_equalize=False,
-            prefix='baseline_fft', gpu=0, force_run: bool = False, target_steps: int = 30000):
+            prefix='baseline_fft', gpu=0, force_run: bool = False, target_steps: int = 30000,
+            optimizer_params: dict = None):
     """
 
     Args:
@@ -63,6 +64,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
         token_equalize: Equalize token lengths
         force_run: Force the run or not
         target_steps: Target steps for convolution
+        optimizer_params:
     Returns:
     """
     which_model = 'fft'
@@ -83,7 +85,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
     # Maintaining approximately the same number of steps for all datasets
     # epochs = target_specs/steps per epoch
     if epochs is None:
-        epochs = {task:  math.ceil(target_steps/(constants.COUNTS[task]/batch_size)) for task in tasks}
+        epochs = {task: math.ceil(target_steps / (constants.COUNTS[task] / batch_size)) for task in tasks}
     else:
         epochs = {task: epochs for task in tasks}
 
@@ -100,8 +102,11 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
         raise FileNotFoundError('Was optimization run to get learning rates?')
 
     # Benchmark of target signifies target tasks
-    optimizer_params = {task: {'learning_rate': optimizer_lrs[task], 'weight_decay': 1E-4,
-                               'beta_1': 0.8, 'beta_2': 0.999} for task in tasks}
+    # Benchmark of target signifies target tasks
+    default = {task: {'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999} for task in tasks}
+    optimizer_params = default if optimizer_params is None else optimizer_params
+    for task in tasks:
+        optimizer_params[task] = optimizer_lrs[task]
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params, debug=False,
@@ -110,7 +115,8 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
 
 
 def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epochs=None, token_equalize=False,
-             prefix='baseline_soft', gpu=0, force_run: bool = False, target_steps: int = 30000):
+             prefix='baseline_soft', gpu=0, force_run: bool = False, target_steps: int = 30000,
+             optimizer_params: dict = None):
     """
 
     Args:
@@ -123,6 +129,7 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
         token_equalize: Equalize token lengths
         force_run: Force the run or not
         target_steps: Target steps for convolution
+        optimizer_params:
     Returns:
     """
 
@@ -143,12 +150,14 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
     # Maintaining approximately the same number of steps for all datasets
     # epochs = target_specs/steps per epoch
     if epochs is None:
-        epochs = {task:  math.ceil(target_steps/(constants.COUNTS[task]/batch_size)) for task in tasks}
+        epochs = {task: math.ceil(target_steps / (constants.COUNTS[task] / batch_size)) for task in tasks}
     else:
         epochs = {task: epochs for task in tasks}
+
     # Benchmark of target signifies target tasks
-    optimizer_params = {task: {'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999}
-                        for task in tasks}
+    default = {'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999}
+    optimizer_params = default if optimizer_params is None else optimizer_params
+    optimizer_params = {task: optimizer_params for task in tasks}
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
     run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params, debug=False,
@@ -157,7 +166,9 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
 
 
 if __name__ == '__main__':
-    constants.SEED = 42
+    constants.SEED = 47
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', prefix='baseline_soft_equal_2',
-             token_equalize=True, gpu=0, force_run=True)
+    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='superglue',
+             prefix='baseline_soft_unequal_wd',
+             token_equalize=False, gpu=0, force_run=False, target_steps=15000,
+             optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999})

@@ -129,7 +129,7 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
 
 def experiment(prefix='experiment', model_checkpoint='t5-small', batch_size=32, task=None,
                epochs=None, gpu=0, optimizer_param=None, encoder_max_length=None, token_equalize=False,
-               which_model='soft'):
+               which_model='soft', force_run: bool = False):
     """
 
     Args:
@@ -143,6 +143,7 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', batch_size=32, 
         encoder_max_length: Max length to encode the inputs
         token_equalize: Equalize token size
         which_model:
+        force_run:
 
     Returns:
     """
@@ -174,11 +175,12 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', batch_size=32, 
     optimizer_param_ = get_optimizer(optimizer_param)
     run_one_split(logger, model_config=model_config, optimizer_params=optimizer_param_, which_data=task,
                   batch_size=batch_size, cache_path=cache_path, checkpoint_filepath=checkpoint_filepath,
-                  debug=True, prefix=prefix, epochs=epochs, token_equalize=token_equalize)
+                  debug=True, prefix=prefix, epochs=epochs, token_equalize=token_equalize, force_run=force_run)
 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
     experiment(prefix='rte_lr_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'rte'),
                gpu=1, encoder_max_length=None, token_equalize=True, epochs=None,
-               optimizer_param={'learning_rate': 0.1, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})
+               optimizer_param={'learning_rate': 0.1, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
+               force_run=True)
