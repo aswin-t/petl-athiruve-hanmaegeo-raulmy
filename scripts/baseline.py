@@ -90,7 +90,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
     # Benchmark of target signifies target tasks
     # Learning rate on log scale
     try:
-        all_tasks_tag = model_checkpoint + '-' + which_model + '-' + benchmark
+        all_tasks_tag = model_checkpoint + '-' + which_model + '-' + tasks[0][0]
         filepath = os.path.join(checkpoint_filepath, 'optimizer/lro-' + all_tasks_tag + '.p')
         with open(filepath, 'rb') as infi:
             optimizer_lrs = pickle.load(infi)
