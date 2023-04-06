@@ -282,6 +282,6 @@ def get_adamw_lrs(model_checkpoint, which_model, benchmark, max_batch_size=100, 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
     # bm = (('glue', 'mrpc'), )
-    bm = 'glue'
-    get_adamw_lrs(model_checkpoint=mcp, which_model='fft', benchmark=bm, max_batch_size=25,
-                  min_num_batches=50, lower_range=1E-7, upper_range=1, gpu=1)
+    bm = 'superglue'
+    get_adamw_lrs(model_checkpoint=mcp, which_model='fft', benchmark=bm, max_batch_size=32,
+                  min_num_batches=50, lower_range=1E-7, upper_range=1, gpu=0)

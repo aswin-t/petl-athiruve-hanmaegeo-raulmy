@@ -50,7 +50,7 @@ def run_model(benchmark, model_config: dict, optimizer_params: dict, checkpoint_
 
 
 def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epochs=None, token_equalize=False,
-            prefix='baseline_fft', gpu=0, force_run: bool = False):
+            prefix='baseline_fft', gpu=0, force_run: bool = False, target_steps: int = 30000):
     """
 
     Args:
@@ -62,10 +62,10 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
         prefix: Model prefix to use
         token_equalize: Equalize token lengths
         force_run: Force the run or not
+        target_steps: Target steps for convolution
     Returns:
     """
     which_model = 'fft'
-    target_steps = 30000
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
@@ -110,7 +110,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
 
 
 def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epochs=None, token_equalize=False,
-             prefix='baseline_soft', gpu=0, force_run: bool = False):
+             prefix='baseline_soft', gpu=0, force_run: bool = False, target_steps: int = 30000):
     """
 
     Args:
@@ -122,11 +122,11 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
         prefix: Prefix for run differentiate log files
         token_equalize: Equalize token lengths
         force_run: Force the run or not
+        target_steps: Target steps for convolution
     Returns:
     """
 
     which_model = 'soft'
-    target_steps = 30000
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
 
