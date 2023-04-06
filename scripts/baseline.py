@@ -103,13 +103,15 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
 
     # Benchmark of target signifies target tasks
     # Benchmark of target signifies target tasks
-    default = {task: {'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999} for task in tasks}
+    default = {'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999}
     optimizer_params = default if optimizer_params is None else optimizer_params
+    optimizer_params_ = {}
     for task in tasks:
-        optimizer_params[task] = optimizer_lrs[task]
+        optimizer_params_[task] = optimizer_params.copy()
+        optimizer_params_[task]['learning_rate'] = optimizer_lrs[task]
 
     # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
-    run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params, debug=False,
+    run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params_, debug=False,
               prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs,
               token_equalize=token_equalize, force_run=force_run)
 
