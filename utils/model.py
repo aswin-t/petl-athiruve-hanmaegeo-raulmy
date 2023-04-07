@@ -245,6 +245,104 @@ class PromptDenseLayer(tf.keras.layers.Layer):
         return input_shape
 
 
+class PromptLibraryLayer(tf.keras.layers.Layer):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.num_tokens = constants.NUM_SOFT_TOKENS
+        self.soft_prompt = None
+        self.initialized = False
+
+    def build(self, input_shape):
+        """
+        This function is called when a batch so that the appropriate sized arrays can be created
+        Args:
+            input_shape: Size of the input embedding array
+
+        Returns:
+
+        """
+
+        if not self.initialized:
+            # Create a prompt that
+            initializer = tf.keras.initializers.RandomUniform(minval=-0.5, maxval=0.5)
+            self.soft_prompt = self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
+                                               initializer=initializer)
+            tf.print('Initializing prompt weights')
+        else:
+            # The weights were already initialized
+            tf.print('Prompt weights were already initialized')
+
+        # This is added at the end to let super*() know that build is complete
+        super().build(input_shape)
+
+    def call(self, input_embeds, *args, **kwargs):
+        """
+
+        Args:
+            input_embeds: Input embeddings
+            *args: unused
+            **kwargs: unused
+
+        Returns:
+
+        """
+
+        # debug = True
+
+        # This scales the prompt to the input batch size
+        # 1. create an ones array of batch size (batch_size, )
+        ones_array = tf.ones((tf.shape(input_embeds)[0],), dtype=self.dtype)
+
+        # 2. tensordot with soft prompt
+        # Gives the shape (batch_size, num_tokens, model_d)
+        scaled = tf.tensordot(ones_array, self.soft_prompt, axes=[[], []])
+
+        # if debug:
+        #     embed_sum_in_start = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
+        #     embed_sum_in_end = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
+
+        # Now concat the input embedding to the output embeddings
+        # Replace the first 'n' embedding with our trainable one
+        in_shape = tf.shape(input_embeds)
+        input_embeds = tf.concat((scaled, input_embeds[:, self.num_tokens:, :]), axis=1)
+
+        # This is an artifact of how the model is initialized
+        if tf.shape(input_embeds)[1] > in_shape[1]:
+            input_embeds = input_embeds[:, :in_shape[1], :]
+        else:
+            pass
+            #
+            # if debug:
+            #     embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
+            #
+            #     tf.print('\nin[0]', embed_sum_in_start[:20], embed_sum_in_start[23:])
+            #     tf.print('out[0]', embed_sum_out[:20], embed_sum_out[23:])
+            #     tf.print('delta[0]', embed_sum_out[:20] - embed_sum_in_start[:20],
+            #              embed_sum_out[20:] - embed_sum_in_start[20:])
+            #
+            #     embed_sum_out = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
+            #     tf.print('\nin[-1]', embed_sum_in_end[:20], embed_sum_in_end[23:])
+            #     tf.print('out[-1]', embed_sum_out[:20], embed_sum_out[23:])
+            #     tf.print('delta[-1]', embed_sum_out[:20] - embed_sum_in_end[:20],
+            #              embed_sum_out[20:] - embed_sum_in_end[20:])
+            #
+            #     tf.print('prompt sum', embed_sum_out[:20])
+
+        return input_embeds
+
+    def compute_output_shape(self, input_shape):
+        """
+
+        Args:
+            input_shape: Shape of batch input
+
+        Returns: List with shape of batch output
+
+        """
+
+        return input_shape
+
 ####################################################
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
