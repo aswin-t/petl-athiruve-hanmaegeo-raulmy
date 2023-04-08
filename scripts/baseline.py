@@ -167,10 +167,69 @@ def run_soft(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epoch
               token_equalize=token_equalize, force_run=force_run)
 
 
+def run_spt(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epochs=None, token_equalize=False,
+            prefix='baseline_soft', gpu=0, force_run: bool = False, target_steps: int = 30000,
+            optimizer_params: dict = None, source_task=None):
+    """
+
+    Args:
+        model_checkpoint: t5-small, t5-base
+        batch_size: Mini batch size
+        benchmark: glue, super_glue, target
+        epochs: Number of training epochs
+        gpu: Which GPU to use
+        prefix: Prefix for run differentiate log files
+        token_equalize: Equalize token lengths
+        force_run: Force the run or not
+        target_steps: Target steps for convolution
+        optimizer_params:
+        source_task:
+    Returns:
+    """
+
+    which_model = 'soft'
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
+
+    prompt_specs = {'model_checkpoint': model_checkpoint, 'which_model': which_model,
+                    'which_data': source_task, 'token_equalize': token_equalize}
+    model_config = {'model_checkpoint': model_checkpoint, 'which_model': which_model,
+                    'prompt_transfer': prompt_specs}
+    checkpoint_filepath = os.path.join(os.path.dirname(__file__), "../mycheckpoints")
+
+    if isinstance(benchmark, list):
+        tasks = benchmark
+    elif isinstance(benchmark, tuple):
+        raise TypeError('Benchmark can be string, glue, sueprglue or a list of tuples of task names')
+    else:
+        tasks = Tasks()[benchmark]
+
+    # Maintaining approximately the same number of steps for all datasets
+    # epochs = target_specs/steps per epoch
+    if epochs is None:
+        epochs = {task: math.ceil(target_steps / (constants.COUNTS[task] / batch_size)) for task in tasks}
+    else:
+        epochs = {task: epochs for task in tasks}
+
+    # Benchmark of target signifies target tasks
+    default = {'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999}
+    optimizer_params = default if optimizer_params is None else optimizer_params
+    optimizer_params = {task: optimizer_params for task in tasks}
+
+    # Benchmark can be given as this tuple of atsks or a benchmark name such as 'glue' or 'super_glue'
+    run_model(benchmark=benchmark, model_config=model_config, optimizer_params=optimizer_params, debug=False,
+              prefix=prefix, batch_size=batch_size, checkpoint_filepath=checkpoint_filepath, epochs=epochs,
+              token_equalize=token_equalize, force_run=force_run)
+
+
 if __name__ == '__main__':
-    constants.SEED = 47
+    constants.SEED = 42
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='superglue',
-             prefix='baseline_soft_unequal_wd',
-             token_equalize=False, gpu=0, force_run=False, target_steps=15000,
-             optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999})
+    # run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue',
+    #          prefix='baseline_soft_unequal',
+    #          token_equalize=False, gpu=0, force_run=True, target_steps=15000,
+    #          optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})
+    run_spt(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue', epochs=1,
+            prefix='baseline_spt', token_equalize=False, gpu=0, force_run=False, target_steps=30000,
+            optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
+            source_task=('glue', 'mrpc'))

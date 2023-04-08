@@ -876,7 +876,7 @@ class PrepDataset:
         splits = {}
         counts = {}
         token_counts = {'train': {}, 'val': {}}
-        # weight_map = {}
+        weight_map = {}
 
         # Create a partial function with tokenize.
         for split in ['train', 'val']:
@@ -900,8 +900,8 @@ class PrepDataset:
 
             # For the train split, keep a count of token
             if split == 'train':
-                # weight_map = self._histo_normalize(token_counts['train'])
                 pass
+                # weight_map = self._histo_normalize(token_counts['train'])
 
             # Seed for splitting validation and test
             self.logger.info(f'Splitting with seed {constants.SEED}')
@@ -910,12 +910,6 @@ class PrepDataset:
                 tts = splits[split].train_test_split(test_size=0.4, seed=constants.SEED)
                 splits[split] = tts['train']
                 splits['test'] = tts['test']
-
-            # We have a dictionary of weigths, create sample_weights using that
-            # splits[split] = \
-            #     splits[split].map(lambda example:
-            #                       {'sample_weights': weight_map[tuple(example['labels'])]},
-            #                       load_from_cache_file=False)
 
             # Convert to TensorFlow dataset
             tfsplits[split] = splits[split].to_tf_dataset(

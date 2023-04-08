@@ -1,6 +1,7 @@
 ENCODER_MAX_LEN = 250
 DECODER_MAX_LEN = 50
 NUM_SOFT_TOKENS = 20
+NUM_lIBRARY_PROMPTS = 15
 SEED = 42
 
 # Number of elements in each train set
@@ -13,8 +14,8 @@ COUNTS = {('glue', 'cola'): 8551, ('glue', 'mrpc'): 3668, ('glue', 'qnli'): 1047
 
 GLUE_TASKS = (('glue', 'mnli'), ('glue', 'rte'), ('glue', 'cola'), ('glue', 'mrpc'), ('glue', 'qnli'), ('glue', 'qqp'),
               ('glue', 'sst2'), ('glue', 'wnli'))
-SUPERGLUE_TASKS = (('super_glue', 'cb'), ('super_glue', 'boolq'), ('super_glue', 'wic'),
-                   ('super_glue', 'multirc'), ('super_glue', 'copa'),  ('super_glue', 'wsc.fixed'),)
+SUPERGLUE_TASKS = (('super_glue', 'boolq'), ('super_glue', 'multirc'), ('super_glue', 'wic'), ('super_glue', 'copa'),
+                   ('super_glue', 'wsc.fixed'), ('super_glue', 'cb'), )
 TARGET_TASKS = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mrpc'), ('glue', 'sst2'), ('glue', 'mnli'))
 
 

@@ -109,12 +109,9 @@ def _create_file_tag(model_checkpoint, which_model, which_data, optimizer_tag, t
 
     """
     led = LabelEncodeDecode(which_data, do_equal=token_equalize)
-
     tag = model_checkpoint + '-' + which_model + '-'
     tag += led.get_tag()
-
-    tag += '-' + optimizer_tag
-    return tag
+    return tag, tag + '-' + optimizer_tag
 
 
 def create_prompt_tag(model_checkpoint, model_name, which_data, token_equalize):
@@ -127,7 +124,7 @@ def create_prompt_tag(model_checkpoint, model_name, which_data, token_equalize):
 
     tag = model_checkpoint + '-' + model_name + '-'
     tag += led.get_tag()
-    return tag
+    return tag, led.get_tag()
 
 
 def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint, which_data, token_equalize):
@@ -153,7 +150,7 @@ def _save_soft_prompt(model, which_model, checkpoint_filepath, model_checkpoint,
         os.makedirs(filepath, exist_ok=True)
 
         # Only the model checkpoint
-        prompt_tag = create_prompt_tag(model_checkpoint, which_model, which_data, token_equalize)
+        prompt_tag, _ = create_prompt_tag(model_checkpoint, which_model, which_data, token_equalize)
         model.save_prompt(os.path.join(filepath, 'soft-prompt-' + prompt_tag))
 
         return prompt_tag
@@ -188,10 +185,10 @@ def _load_soft_prompt(model, which_model, prompt_model, checkpoint_filepath, mod
         os.makedirs(checkpoint_filepath, exist_ok=True)
 
         # Only the model checkpoint
-        prompt_tag = create_prompt_tag(model_checkpoint, prompt_model, which_data, token_equalize)
-        model.load_prompt(os.path.join(checkpoint_filepath, 'soft-prompt-' + prompt_tag))
+        prompt_tag, simple_tag = create_prompt_tag(model_checkpoint, prompt_model, which_data, token_equalize)
+        model.load_prompt(os.path.join(checkpoint_filepath, 'soft-prompt-' + prompt_tag + '.npy'))
 
-        return prompt_tag
+        return prompt_tag, simple_tag
     else:
         return ""
 
@@ -239,7 +236,7 @@ def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
         filepath = os.path.join(checkpoint_filepath, tag + '-e{epoch:02d}-v{val_accuracy:.3f}.hdf5')
         model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
             filepath=filepath, save_weights_only=True, monitor='val_accuracy', save_best_only=True, mode='max')
-    elif official_name == 'PETLSoftPrompt':
+    elif official_name in ['PETLSoftPrompt', 'PETLLibraryPrompt']:
         filepath = os.path.join(checkpoint_filepath, tag)
         model_checkpoint_callback = PromptCallback(filepath=filepath, best_is_lower=False)
     else:
@@ -261,6 +258,8 @@ def get_model_official_name(which_model):
         model_name = 'PETLSoftPrompt'
     elif which_model.lower() in ['spt', 'soft_prompt_transfer', 'softprompttransfer']:
         model_name = 'PETLSoftPromptTransfer'
+    elif which_model.lower() in ['lib', 'petl_lib', 'library']:
+        model_name = 'PETLLibraryPrompt'
     elif which_model.lower() in ['full', 'full_fine_tune', 'fullfinetune', 'fft']:
         model_name = 'FullFineTune'
     else:
@@ -355,14 +354,14 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
 
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
-    tag = _create_file_tag(model_checkpoint, official_name, which_data, "", token_equalize)
+    tag, with_opt = _create_file_tag(model_checkpoint, official_name, which_data, "", token_equalize)
     if prefix:
         tag = prefix + '-' + tag
 
     start_epoch = 0
 
     # Running this evaluation
-    logger.info(f'This evaluation tag is {tag}')
+    logger.info(f'This evaluation tag is {with_opt}')
 
     # 3. Prepare the data
     # Load teh data to memory
@@ -385,8 +384,9 @@ def run_lr_split(logger, optimizer_algo, model_config: dict = None, epochs: int 
         prompt_official_name = get_model_official_name(prompt_which_model)
         prompt_checkpoint_filepath = os.path.join(checkpoint_filepath, "..")
         # Load the soft prompt for this model
-        prompt_tag = _load_soft_prompt(model, official_name, prompt_official_name, prompt_checkpoint_filepath,
-                                       prompt_model_checkpoint, prompt_which_data, token_equalize=prompt_token_equalize)
+        prompt_tag, simple_tag = _load_soft_prompt(
+            model, official_name, prompt_official_name, prompt_checkpoint_filepath, prompt_model_checkpoint,
+            prompt_which_data, token_equalize=prompt_token_equalize)
         tag += '-softprompt-' + prompt_tag
     model.summary()
     _log_gpu_usage(logger, prefix="Model created")
@@ -452,7 +452,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
 
     # 2. Create a unique tag and load model checkpoint
     # Create a tag for this unique model
-    tag = _create_file_tag(model_checkpoint, official_name, which_data, optimizer_tag, token_equalize)
+    tag, with_opt = _create_file_tag(model_checkpoint, official_name, which_data, optimizer_tag, token_equalize)
     if prefix:
         tag = prefix + '-' + tag
 
@@ -485,9 +485,10 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
         prompt_official_name = get_model_official_name(which_model)
         filepath = os.path.join(checkpoint_filepath, 'soft_prompt')
         # Load the soft prompt for this model
-        prompt_tag = _load_soft_prompt(model, official_name, prompt_official_name, filepath, prompt_model_checkpoint,
-                                       prompt_which_data, prompt_token_equalize)
-        tag += '-softprompt-' + prompt_tag
+        prompt_tag, simple_tag = \
+            _load_soft_prompt(model, official_name, prompt_official_name, filepath, prompt_model_checkpoint,
+                              prompt_which_data, prompt_token_equalize)
+        tag += '-softprompt-' + simple_tag
 
     # Display model summary
     model.summary()
@@ -557,27 +558,14 @@ def get_optimizer(optimizer_param):
 
     """
 
-    try:
-        # This is as per the paper
-        optimizer = tf.keras.optimizers.Adafactor(**optimizer_param)
-        if not isinstance(optimizer_param['learning_rate'], float):
-            lr_str = str(optimizer_param['learning_rate']).split('.')[4].split(' ')[0] + '-'
-            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param['learning_rate'].__dict__.items())
-            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param.items() if k != 'learning_rate')
-        else:
-            lr_str = f"".join(f'{k}-{v}-' for k, v in optimizer_param.items())
-
-        optimizer_tag = f'adafactor-' + lr_str
-    except AttributeError:
-        optimizer = tf.keras.optimizers.experimental.AdamW(**optimizer_param)
-
-        if not isinstance(optimizer_param['learning_rate'], float):
-            lr_str = str(optimizer_param['learning_rate']).split('.')[4].split(' ')[0] + '-'
-            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param['learning_rate'].__dict__.items())
-            lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param.items() if k != 'learning_rate')
-        else:
-            lr_str = f"".join(f'{k}-{v}-' for k, v in optimizer_param.items())
-        optimizer_tag = f'adamw-' + lr_str
+    optimizer = tf.keras.optimizers.experimental.AdamW(**optimizer_param)
+    if not isinstance(optimizer_param['learning_rate'], float):
+        lr_str = str(optimizer_param['learning_rate']).split('.')[4].split(' ')[0] + '-'
+        lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param['learning_rate'].__dict__.items())
+        lr_str += f"".join(f'{k}-{v}-' for k, v in optimizer_param.items() if k != 'learning_rate')
+    else:
+        lr_str = f"".join(f'{k}-{v}-' for k, v in optimizer_param.items())
+    optimizer_tag = f'adamw-' + lr_str
 
     return {'optimizer': optimizer, 'tag': optimizer_tag}
 

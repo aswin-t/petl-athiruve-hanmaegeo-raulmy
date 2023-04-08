@@ -58,11 +58,11 @@ def _create_optimizer_experiments(total_steps):
     """
 
     scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts
-    weight_decays = [1E-5, 1E-3]
-    learning_rates = [0.3]
-    beta1_decays = [0.7, 0.8, 0.9]
+    weight_decays = [1E-6, 1E-4, 1E-2]
+    learning_rates = [0.1, 0.3, 0.7, 1.0]
+    beta1_decays = [0.7, 0.8, 0.9, 0.99]
     beta2_decays = [0.99, 0.999, 0.9999]
-    do_schedulers = [False, ]
+    do_schedulers = [False, True]
 
     first_decay_steps = int(total_steps / 3)
 
@@ -82,17 +82,17 @@ def _create_optimizer_experiments(total_steps):
     return out
 
 
-def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_batch_size=100, task=None, epochs=30,
-                   gpu=0):
+def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', batch_size=32, task=None, gpu=0,
+                   target_steps=20000):
     """
 
     Args:
         prefix:
         model_checkpoint: t5-small, t5-base
-        max_batch_size: Maximum batch size
-        epochs: Number of training epochs
+        batch_size: Maximum batch size
         gpu: Which GPU to use
         task:
+        target_steps:
 
     Returns:
     """
@@ -112,12 +112,13 @@ def hyperparameter(prefix='hyperparameter', model_checkpoint='t5-small', max_bat
     logger.info(f'Performing {task} tuning')
 
     # Ensure at least 50 batches
-    batch_size = {task: max_batch_size}
+    batch_size = {task: batch_size}
 
     # Get the batch size
     # Run one experiment and log all results
     # If it fails then carry on
-    total_steps = int((constants.COUNTS[task] / batch_size[task]) * epochs)
+    epochs = math.ceil(target_steps / (constants.COUNTS[task] / batch_size[task]))
+    total_steps = int(epochs * (constants.COUNTS[task] / batch_size[task]))
     optimizer_experiments = _create_optimizer_experiments(total_steps)
 
     for optimizer_param in optimizer_experiments:
@@ -180,7 +181,14 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', batch_size=32, 
 
 if __name__ == '__main__':
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    experiment(prefix='rte_lr_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'rte'),
-               gpu=1, encoder_max_length=None, token_equalize=True, epochs=None,
-               optimizer_param={'learning_rate': 0.1, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
-               force_run=True)
+    # experiment(prefix='lib_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'mrpc'),
+    #            gpu=1, encoder_max_length=None, token_equalize=True, epochs=100, which_model='lib',
+    #            optimizer_param={'learning_rate': 3.0, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
+    #            force_run=False)
+    experiment(prefix='spt_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'mrpc'),
+               gpu=1, encoder_max_length=None, token_equalize=True, epochs=100, which_model='lib',
+               optimizer_param={'learning_rate': 3.0, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
+               force_run=False)
+    # constants.SEED = 73
+    # hyperparameter(prefix='hp1', model_checkpoint=mcp, batch_size=32, task=('super_glue', 'wsc.fixed'),
+    #                gpu=0, target_steps=20000)
