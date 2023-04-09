@@ -256,8 +256,8 @@ class PromptLibraryLayer(tf.keras.layers.Layer):
         self.library = None
         self.initialized = False
         self.embedding_size = None
-        self.mode = 'weighted'
-        self.reduce_type = 'prompt'  # One of token or prompt
+        self.mode = constants.PROMPT_MODE.mode
+        self.reduce_type = constants.PROMPT_REDUCE_TYPE.reduce_type  # One of token or prompt
 
     def build(self, input_shape):
         """
@@ -270,11 +270,13 @@ class PromptLibraryLayer(tf.keras.layers.Layer):
         """
 
         if not self.initialized:
+            tf.print('Initializing prompt weights')
             if self.mode == 'softmax':
                 # Create a prompt that
                 initializer = tf.keras.initializers.RandomUniform(minval=-0.5, maxval=0.5)
                 self.similarity_weights = \
-                    self.add_weight(name='prompt-weight', shape=[self.num_tokens, input_shape[2]],
+                    self.add_weight(name='prompt-weight',
+                                    shape=[self.num_tokens, input_shape[2]],
                                     initializer=initializer)
 
                 # This is just a placeholder
@@ -284,12 +286,17 @@ class PromptLibraryLayer(tf.keras.layers.Layer):
                                     shape=[self.num_library_prompts, self.num_tokens, input_shape[2]],
                                     initializer=initializer, trainable=False)
                 self.embedding_size = input_shape[2]
-                tf.print('Initializing prompt weights')
             else:
                 # These are weights that individual prompts get
-                initializer = tf.keras.initializers.Constant(1.0/self.num_library_prompts)
-                self.similarity_weights = \
-                    self.add_weight(name='prompt-weight', shape=[self.num_library_prompts], initializer=initializer)
+                initializer = tf.keras.initializers.Constant(1.0 / self.num_library_prompts)
+                if self.reduce_type == 'token':
+                    self.similarity_weights = \
+                        self.add_weight(name='prompt-weight', shape=[self.num_library_prompts, self.num_tokens],
+                                        initializer=initializer)
+                else:
+                    self.similarity_weights = \
+                        self.add_weight(name='prompt-weight', shape=[self.num_library_prompts],
+                                        initializer=initializer)
 
                 # This is just a placeholder
                 # self.library = tf.ones([self.num_library_prompts, self.num_tokens, input_shape[2]], dtype=self.dtype)
@@ -312,13 +319,13 @@ class PromptLibraryLayer(tf.keras.layers.Layer):
             # 2. Here we find the desired soft prompt by using the similarity matrix over all the soft prompts
             cosine_similarity = tf.math.multiply(self.library, self.similarity_weights)
             similarity_by_token = tf.math.reduce_sum(cosine_similarity, axis=-1, keepdims=True)
-            # similarity_by_token = tf.keras.backend.sum(self.library * self.similarity_weights, axis=-1, keepdims=True)
-            # tf.print(f'sbt shape {tf.shape(similarity_by_token)}')
-
-            # 2. a. Similarity weight across all the prompts
             token_weights = tf.nn.softmax(similarity_by_token, axis=0)
-            # token_weights = tf.keras.activations.softmax(similarity_by_token, axis=0)
-            # tf.print(f'tw shape {tf.shape(token_weights)}')
+
+            if constants.PROMPT_DEBUG:
+                tf.print(f'prompt weights {tf.math.reduce_sum(self.similarity_weights, axis=(-1))}', summarize=-1)
+                tf.print(f'sbt shape {tf.shape(similarity_by_token)}', summarize=-1)
+                tf.print(f'tw shape {tf.shape(token_weights)}', summarize=-1)
+                tf.print('most similar prompt:', tf.argmax(token_weights, axis=0), summarize=-1)
 
             # 3. a Take the weighted average of all the prompts
             # weights = tf.keras.backend.sum(self.library * token_weights, axis=0)
@@ -328,16 +335,17 @@ class PromptLibraryLayer(tf.keras.layers.Layer):
             # 2. Here we find the desired soft prompt by using the similarity matrix over all the soft prompts
             cosine_similarity = tf.tensordot(self.library, self.similarity_weights, axes=[(1, 2), (0, 1)])
             token_weights = tf.nn.softmax(cosine_similarity)
-            tf.print('\nprompt similarity:', token_weights)
-            tf.print('\nmost similar prompt:', tf.argmax(token_weights))
-            # similarity_by_token = tf.keras.backend.sum(self.library * self.similarity_weights, axis=-1, keepdims=True)
-            # tf.print(f'sbt shape {tf.shape(similarity_by_token)}')
 
             # 2. a. Similarity weight across all the prompts
             weights_reshaped = tf.expand_dims(token_weights, axis=-1)
             scaled_token_weights = tf.expand_dims(tf.tile(weights_reshaped, [1, self.num_tokens]), axis=-1)
-            # token_weights = tf.keras.activations.softmax(similarity_by_token, axis=0)
-            # tf.print(f'tw shape {tf.shape(token_weights)}')
+
+            if constants.PROMPT_DEBUG:
+                tf.print(f'prompt weights {tf.math.reduce_sum(self.similarity_weights, axis=(-1))}', summarize=-1)
+                tf.print('prompt similarity:', token_weights, summarize=-1)
+                tf.print('most similar prompt:', tf.argmax(token_weights), summarize=-1)
+
+                tf.print(f'tw shape {tf.shape(token_weights)}')
 
             # 3. a Take the weighted average of all the prompts
             # weights = tf.keras.backend.sum(self.library * token_weights, axis=0)
@@ -347,20 +355,46 @@ class PromptLibraryLayer(tf.keras.layers.Layer):
         return weights
 
     def _weighted_average(self):
-        token_weights = self.similarity_weights
-        # tf.print('\nprompt weights:', token_weights)
-        # tf.print('\nmost similar prompt:', tf.argmax(token_weights))
 
-        # 2. a. Similarity weight across all the prompts
-        weights_reshaped = tf.expand_dims(token_weights, axis=-1)
-        scaled_token_weights = tf.expand_dims(tf.tile(weights_reshaped, [1, self.num_tokens]), axis=-1)
+        if self.reduce_type == 'token':
+            # 2. Here we have weights per token
+            # Final weight = weight per token per prompt (# prompts, # token) *
+            #                 prompt embeddings (# prompts, # tokens, embed length)
+            # Prompt embeddings have the size num of tokens X length of embeddings
+            token_weights = tf.expand_dims(self.similarity_weights, axis=-1)
+            # print(tf.shape(token_weights))
+            # print(tf.shape(self.library))
 
-        # 3. a Take the weighted average of all the prompts
-        # weights = tf.keras.backend.sum(self.library * token_weights, axis=0)
-        weighted_tokens = tf.math.multiply(self.library, scaled_token_weights)
-        weights = tf.math.reduce_sum(weighted_tokens, axis=0)
-        # tf.print(weights.shape)
+            # 2. a Take the weighted average of all the prompts
+            weighted_tokens = tf.math.multiply(self.library, token_weights)
 
+            if constants.PROMPT_DEBUG:
+                tf.print('prompt weights:', token_weights, summarize=-1)
+                tf.print('most similar prompt:', tf.argmax(token_weights, axis=0), summarize=-1)
+                tf.print(tf.math.reduce_sum(weighted_tokens, axis=(1, 2)), summarize=-1)
+
+            weights = tf.math.reduce_sum(weighted_tokens, axis=0)
+        else:
+            # 2. Here we have weights per prompt
+            # Final weight = weight per prompt(num of tokens, 1) * prompt embeddings (# prompts, # tokens, embed length)
+            # The prompt weights have to be reshaped and scaled to broadcast it
+            token_weights = self.similarity_weights
+
+            # 2. a. Similarity weight across all the prompts
+            weights_reshaped = tf.expand_dims(token_weights, axis=-1)
+            scaled_token_weights = tf.expand_dims(tf.tile(weights_reshaped, [1, self.num_tokens]), axis=-1)
+
+            # 2. b Take the weighted average of all the prompts
+            weighted_tokens = tf.math.multiply(self.library, scaled_token_weights)
+
+            if constants.PROMPT_DEBUG:
+                tf.print('prompt weights:', token_weights, summarize=-1)
+                tf.print('most similar prompt:', tf.argmax(token_weights), summarize=-1)
+                tf.print(tf.shape(weights_reshaped), summarize=-1)
+                tf.print(tf.math.reduce_sum(weights_reshaped, axis=-1), summarize=-1)
+                tf.print(tf.math.reduce_sum(weighted_tokens, axis=(1, 2)), summarize=-1)
+
+            weights = tf.math.reduce_sum(weighted_tokens, axis=0)
         return weights
 
     def call(self, input_embeds, *args, **kwargs):
@@ -374,60 +408,29 @@ class PromptLibraryLayer(tf.keras.layers.Layer):
         Returns:
 
         """
-        # debug = True
-
         # This scales the prompt to the input batch size
         # 1. create an ones array of batch size (batch_size, )
         ones_array = tf.ones((tf.shape(input_embeds)[0],), dtype=self.dtype)
-        # tf.print(f'lib shape {tf.shape(self.library)}')
-        # tf.print(f'sw shape {tf.shape(self.similarity_weights)}')
 
+        if constants.PROMPT_DEBUG:
+            tf.print('\n')
+
+        # 2. Get the weights based on the mode and reduce type(set in constants)
         weights = self._softmax_weights() if self.mode == 'softmax' else self._weighted_average()
 
-        # 2. tensordot with soft prompt
+        # 3. tensordot with soft prompt
         # Gives the shape (batch_size, num_tokens, model_d)
-        # scaled = tf.tensordot(ones_array, weights, axes=[[], []])
         scaled = tf.tensordot(ones_array, weights, axes=[[], []])
-
-        # if debug:
-        #     embed_sum_in_start = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
-        #     embed_sum_in_end = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
 
         # Now concat the input embedding to the output embeddings
         # Replace the first 'n' embedding with our trainable one
         in_shape = tf.shape(input_embeds)
         input_embeds = tf.concat((scaled, input_embeds[:, self.num_tokens:, :]), axis=1)
-
-        # tf.print('\nweights', tf.math.reduce_sum(self.similarity_weights, axis=-1))
-        embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
-        # tf.print('prompt sum', embed_sum_out[:20])
-
         # This is an artifact of how the model is initialized
         if tf.shape(input_embeds)[1] > in_shape[1]:
             input_embeds = input_embeds[:, :in_shape[1], :]
         else:
             pass
-            # tf.print('\nweights', tf.math.reduce_sum(self.similarity_weights, axis=-1))
-            embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
-            # tf.print('prompt sum', embed_sum_out[:20])
-            #
-            # if debug:
-            #
-            #     embed_sum_out = tf.math.reduce_sum(input_embeds[0, :, :], axis=-1)
-            #
-            #     tf.print('\nweights', tf.math.reduce_sum(self.similarity_weights, axis=-1))
-            #     tf.print('\nin[0]', embed_sum_in_start[:20], embed_sum_in_start[23:])
-            #     tf.print('out[0]', embed_sum_out[:20], embed_sum_out[23:])
-            #     tf.print('delta[0]', embed_sum_out[:20] - embed_sum_in_start[:20],
-            #              embed_sum_out[20:] - embed_sum_in_start[20:])
-            #
-            #     embed_sum_out = tf.math.reduce_sum(input_embeds[-1, :, :], axis=-1)
-            #     tf.print('\nin[-1]', embed_sum_in_end[:20], embed_sum_in_end[23:])
-            #     tf.print('out[-1]', embed_sum_out[:20], embed_sum_out[23:])
-            #     tf.print('delta[-1]', embed_sum_out[:20] - embed_sum_in_end[:20],
-            #              embed_sum_out[20:] - embed_sum_in_end[20:])
-            #
-            #     tf.print('prompt sum', embed_sum_out[:20])
 
         return input_embeds
 
@@ -1542,15 +1545,17 @@ class PETLLibraryPrompt(TFLibraryPromptT5ForConditionalGeneration, abc.ABC):
         wandb = self.encoder.prompt.get_weights()
 
         # Save the weights
-        filen = filepath + '.npy'
-        # TODO athiruve - Find a way to save prompts
-        # np.save(filen, wandb)
+        filen = filepath + '-weights-' + '.npy'
+        np.save(filen, wandb[0])
+
+        filen = filepath + '-library-' + '.npy'
+        np.save(filen, wandb[1])
 
         return wandb
 
     def load_library(self, filepath_or_ndarray):
         """
-        Save the prompts as numpy files
+        Load the library and prompt weights
         Args:
             filepath_or_ndarray: Filename with path -weights.npy and -biases.npy will be added to filename
 
@@ -1559,23 +1564,19 @@ class PETLLibraryPrompt(TFLibraryPromptT5ForConditionalGeneration, abc.ABC):
         """
 
         # Get the weights and biases of this layer
-        if isinstance(filepath_or_ndarray, np.ndarray):
+        if isinstance(filepath_or_ndarray, list):
             wandb = filepath_or_ndarray
         else:
+            wandb = []
             # Save the weights
-            filen = filepath_or_ndarray
-            wandb = np.load(filen)
+            filen = filepath_or_ndarray + '-weights-' + '.npy'
+            wandb.append(np.load(filen))
 
-        # Load the weights into arrays
-        try:
-            prompt_weights = np.mean(wandb, axis=0)
-            self.encoder.prompt.set_weights([prompt_weights, wandb])
-            tf.print('Loading prompts with sum of embeddings')
-            tf.print([str(x) for x in np.sum(prompt_weights, axis=1)])
-        except ValueError:
-            prompt_weights = np.ones((wandb.shape[0],)) * 1.0 / wandb.shape[0]
-            self.encoder.prompt.set_weights([prompt_weights, wandb])
+            filen = filepath_or_ndarray + '-library-' + '.npy'
+            wandb.append(np.load(filen))
 
+        # The list has prompt_weights, library of prompt
+        self.encoder.prompt.set_weights(wandb)
         return True
 
 
@@ -1926,12 +1927,32 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
 
         # Create a model instance
         model = PETLLibraryPrompt.from_pretrained(checkpoint.replace('_-_', '/'), from_pt=False)
-        filenames = \
-            glob.glob(
-                r'../mycheckpoints/soft_prompt/soft-prompt-google_-_t5-base-lm-adapt-PETLSoftPrompt-*-unequal.npy'
-            )
-        prompts = np.stack([np.load(filen) for filen in filenames], axis=0)
-        model.load_library(prompts)
+
+        if not checkpoint_file:
+            # We are initializing for the first time here
+            filenames = \
+                glob.glob(
+                    r'../mycheckpoints/soft_prompt/'
+                    r'soft-prompt-google_-_t5-base-lm-adapt-PETLSoftPrompt-glue-*-unequal.npy'
+                )
+
+            # These are the stack of the library of prompts
+            prompts = np.stack([np.load(filen) for filen in filenames], axis=0)
+
+            # Load the weights into arrays
+            if constants.PROMPT_MODE.mode == 'softmax':
+                prompt_weights = np.mean(prompts, axis=0)
+            else:
+                if constants.PROMPT_REDUCE_TYPE.reduce_type == 'token':
+                    prompt_weights = np.ones((prompts.shape[0], prompts.shape[1]))
+                    prompt_weights *= 1.0 / prompts.shape[0]
+                else:
+                    prompt_weights = np.ones((prompts.shape[0],))
+                    prompt_weights *= 1.0 / prompts.shape[0]
+
+            model.load_library([prompt_weights, prompts])
+        else:
+            model.load_library(checkpoint_file)
 
         # This makes the embedding layer non-trainable
         # The layer is called shared because it is shared between the encoder and decoder

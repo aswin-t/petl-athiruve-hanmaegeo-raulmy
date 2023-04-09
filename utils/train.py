@@ -53,7 +53,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
 
     """
 
-    strg_chk = re.compile(r'-e(\d+)-v(\d*\.\d*)\.(hdf5|npy)')
+    strg_chk = re.compile(r'(.*)-e(\d+)-v(\d*\.\d*)(-weights-)*\.(hdf5|npy)')
 
     # Find all filenames that match the current tag
     cur_epoch = -1
@@ -73,22 +73,32 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
 
     if filenames:
         for filename in filenames:
-            if 'done' in filename:
-                continue
-            print(filename)
             # This should match the expected value
             pat = strg_chk.search(filename)
-            epoch = int(pat.group(1))
-            val = float(pat.group(2))
+            if pat:
+                prefix = pat.group(1)
+                epoch = pat.group(2)
+                val = pat.group(3)
 
-            if load_best and val > cur_val:
-                filen = filename
-                cur_epoch = epoch
-                cur_val = val
-            elif not load_best and epoch > cur_epoch:
-                filen = filename
-                cur_epoch = epoch
-                cur_val = val
+                filen_ = prefix + f'-e{epoch}-v{val}'
+                epoch = int(epoch)
+                val = float(val)
+
+                if load_best and val > cur_val:
+                    filen = filen_
+                    cur_epoch = epoch
+                    cur_val = val
+                    if not pat.group(4):
+                        filen += '.' + pat.group(5)
+
+                elif not load_best and epoch > cur_epoch:
+                    filen = filen_
+                    cur_epoch = epoch
+                    cur_val = val
+                    if not pat.group(4):
+                        filen += '.' + pat.group(5)
+            else:
+                print(filename)
 
     cur_epoch += 1
 
@@ -98,6 +108,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
     elif force_run and not filen:
         print(filen)
         raise ValueError(f'Force run is set but no model file was found')
+
 
     return filen, cur_epoch, filenames, completed_file
 
@@ -193,13 +204,14 @@ def _load_soft_prompt(model, which_model, prompt_model, checkpoint_filepath, mod
         return ""
 
 
-def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath):
+def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath, official_name):
     """
     For
     Args:
         logger: Logger object
         tag: Filename tag to
         checkpoint_filepath: Location of files
+        official_name: Model official name
 
     Returns:
 
@@ -212,7 +224,12 @@ def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath):
     logger.info(f'Best model file is {filen_best}, last epoch file is {filen_last}')
 
     # Remove these files
-    remove_files = [x for x in all_files if x not in [filen_last, filen_best] and 'done' not in x]
+    if official_name != "PETLLibraryPrompt":
+        remove_files = [x for x in all_files if x not in [filen_best, ] and 'done' not in x]
+    else:
+        keep_files = [filen_best + '-weights-.npy', filen_best + '-library-.npy']
+        remove_files = [x for x in all_files if x not in keep_files and 'done' not in x]
+
     for fname in remove_files:
         logger.info(f'Removing unwanted file {fname}')
         if os.path.isfile(fname):
@@ -459,7 +476,6 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     # Is there a model that has already been created for this?
     ret = _load_checkpoint(tag, checkpoint_filepath, epochs, load_best=False, force_run=force_run)
     if ret is None:
-        _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath)
         return True
     else:
         (filen, start_epoch, filenames, completed_file) = ret
@@ -537,7 +553,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     time.sleep(5)
 
     # Done with everything, so remove all unwanted files
-    _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath)
+    _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath, official_name)
 
     # Mark this run as done
     with open(completed_file, 'w'):

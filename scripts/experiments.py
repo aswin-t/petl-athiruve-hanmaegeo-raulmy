@@ -180,15 +180,21 @@ def experiment(prefix='experiment', model_checkpoint='t5-small', batch_size=32, 
 
 
 if __name__ == '__main__':
+    constants.PROMPT_DEBUG = False
+    constants.PROMPT_MODE.mode = 'weighted'
+    constants.PROMPT_REDUCE_TYPE.reduce_type = 'token'
+
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
-    # experiment(prefix='lib_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'mrpc'),
-    #            gpu=1, encoder_max_length=None, token_equalize=True, epochs=100, which_model='lib',
+    experiment(prefix=f'{constants.PROMPT_MODE.mode}-{constants.PROMPT_REDUCE_TYPE.reduce_type}', model_checkpoint=mcp,
+               batch_size=32, task=('glue', 'mrpc'), gpu=1, encoder_max_length=None, token_equalize=False, epochs=1,
+               which_model='lib', optimizer_param={'learning_rate': 0.01, 'weight_decay': 1E-4, 'beta_1': 0.8,
+                                                   'beta_2': 0.999},
+               force_run=False)
+
+    # experiment(prefix='spt_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'mrpc'),
+    #            gpu=1, encoder_max_length=None, token_equalize=True, epochs=1, which_model='soft',
     #            optimizer_param={'learning_rate': 3.0, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
     #            force_run=False)
-    experiment(prefix='spt_expt', model_checkpoint=mcp, batch_size=32, task=('glue', 'mrpc'),
-               gpu=1, encoder_max_length=None, token_equalize=True, epochs=100, which_model='lib',
-               optimizer_param={'learning_rate': 3.0, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
-               force_run=False)
     # constants.SEED = 73
     # hyperparameter(prefix='hp1', model_checkpoint=mcp, batch_size=32, task=('super_glue', 'wsc.fixed'),
     #                gpu=0, target_steps=20000)

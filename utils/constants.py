@@ -1,7 +1,7 @@
 ENCODER_MAX_LEN = 250
 DECODER_MAX_LEN = 50
 NUM_SOFT_TOKENS = 20
-NUM_lIBRARY_PROMPTS = 15
+NUM_lIBRARY_PROMPTS = 8
 SEED = 42
 
 # Number of elements in each train set
@@ -19,6 +19,38 @@ SUPERGLUE_TASKS = (('super_glue', 'boolq'), ('super_glue', 'multirc'), ('super_g
 TARGET_TASKS = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mrpc'), ('glue', 'sst2'), ('glue', 'mnli'))
 
 
+class PromptMode:
+    def __init__(self):
+        self._mode = 'softmax'
+        self.allowed_modes = ['softmax', 'weighted']
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, item):
+        if item not in self.allowed_modes:
+            raise ValueError(f'mode can only be one of {self.allowed_modes}')
+        self._mode = item
+
+
+class PromptReduceType:
+    def __init__(self):
+        self._reduce_type = 'prompt'
+        self.allowed_reduce_types = ['prompt', 'token']
+
+    @property
+    def reduce_type(self):
+        return self._reduce_type
+
+    @reduce_type.setter
+    def reduce_type(self, item):
+        if item not in self.allowed_reduce_types:
+            raise ValueError(f'Reduce types can only be one of {self.allowed_reduce_types}')
+        self._reduce_type = item
+
+
 class Tasks:
 
     def __getitem__(self, item):
@@ -32,5 +64,13 @@ class Tasks:
             return tuple([task for task in GLUE_TASKS + SUPERGLUE_TASKS if task not in TARGET_TASKS])
 
 
+PROMPT_MODE = PromptMode()
+PROMPT_REDUCE_TYPE = PromptReduceType()
+PROMPT_DEBUG = False
+
+
 if __name__ == '__main__':
-    print(Tasks()['glue'])
+    # print(Tasks()['glue'])
+    PROMPT_MODE.mode = 'weight'
+    print(PROMPT_MODE.mode)
+
