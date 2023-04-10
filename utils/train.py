@@ -109,7 +109,6 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
         print(filen)
         raise ValueError(f'Force run is set but no model file was found')
 
-
     return filen, cur_epoch, filenames, completed_file
 
 

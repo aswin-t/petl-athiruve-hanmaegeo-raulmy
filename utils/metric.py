@@ -3,7 +3,6 @@ import evaluate
 import numpy as np
 import tensorflow as tf
 from functools import partial
-from keras import backend as kb
 from transformers import AutoTokenizer
 from utils import constants
 from utils.data import PrepDataset
@@ -32,6 +31,7 @@ class SelectiveSparseCategoricalAccuracy(tf.keras.metrics.SparseCategoricalAccur
 
         # Counting accuracy with the zeros mak
         super().update_state(y_true[:, :], y_pred[:, :, :], sample_weight)
+
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
