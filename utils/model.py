@@ -1929,6 +1929,7 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         # Create a model instance
         model = PETLSoftPrompt.from_pretrained(checkpoint.replace('_-_', '/'), from_pt=False)
         if checkpoint_file:
+            logger.info(f'Loaded Soft checkpoint file {checkpoint_file}')
             model.load_prompt(checkpoint_file)
         else:
             # if the model is a soft prompt model then it could benefit from an initialization
@@ -1993,6 +1994,7 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
                     weight_dict['prompt-weight'] = prompt_weights
                 model.load_library([weight_dict[x] for x in weight_names])
         else:
+            logger.info(f'Loaded Library checkpoint file {checkpoint_file}')
             model.load_library(checkpoint_file)
 
         # This makes the embedding layer non-trainable
@@ -2021,6 +2023,7 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
         # Create a model instance
         model = FullFineTune.from_pretrained(checkpoint.replace('_-_', '/'), from_pt=False)
         if checkpoint_file:
+            logger.info(f'Loaded FFT checkpoint file {checkpoint_file}')
             model.load_weights(checkpoint_file, by_name=True, skip_mismatch=True)
 
         # Save the model structure to the datalog
