@@ -10,8 +10,8 @@ if __name__ == '__main__':
     constants.SEED = 42
     run_lib(model_checkpoint=mcp, batch_size=32, benchmark='super_glue',
             prefix='lib', token_equalize=False, gpu=1, force_run=False, target_steps=30000, epochs=None,
-            optimizer_params={'learning_rate': 0.1, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
-            prompt_mode='weighted', prompt_reduce_type='prompt')
+            optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
+            prompt_mode='softmax', prompt_reduce_type='token', prompt_library_trainable=True)
 
     # run_spt(model_checkpoint=mcp, batch_size=32, benchmark='glue', epochs=1,
     #         prefix='baseline_spt', token_equalize=False, gpu=1, force_run=False, target_steps=30000,

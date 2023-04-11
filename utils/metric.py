@@ -90,6 +90,7 @@ def evaluate_metric(logger, tag, dprep, checkpoint, model, val_split, is_fft, ba
     references = [x['label'] for x in val_split]
 
     #  These are the predictions from the model
+    logger.info(f'Decoder max length {constants.DECODER_MAX_LEN}')
     text_predictions = []
     for batch in chunks(tokens, batch_size):
         answers = model.generate(tf.stack(batch, axis=0), max_length=constants.DECODER_MAX_LEN,

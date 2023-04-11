@@ -53,7 +53,7 @@ def _load_checkpoint(tag: str, checkpoint_dir: str, epochs: Union[int, None], lo
 
     """
 
-    strg_chk = re.compile(r'(.*)-e(\d+)-v(\d*\.\d*)(-weights-)*\.(hdf5|npy)')
+    strg_chk = re.compile(r'(.*)-e(\d+)-v(\d*\.\d*)(-l0-)*\.(hdf5|npy)')
 
     # Find all filenames that match the current tag
     cur_epoch = -1
@@ -226,7 +226,7 @@ def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath, official
     if official_name != "PETLLibraryPrompt":
         remove_files = [x for x in all_files if x not in [filen_best, ] and 'done' not in x]
     else:
-        keep_files = [filen_best + '-weights-.npy', filen_best + '-library-.npy']
+        keep_files = [filen_best + '-l0-.npy', filen_best + '-l1-.npy', filen_best + '-l2-.npy']
         remove_files = [x for x in all_files if x not in keep_files and 'done' not in x]
 
     for fname in remove_files:

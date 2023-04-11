@@ -226,7 +226,8 @@ def run_spt(model_checkpoint='t5-small', batch_size=32, benchmark='glue', epochs
 
 def run_lib(model_checkpoint='t5-small', batch_size=32, benchmark='super_glue', epochs=None, token_equalize=False,
             prefix='baseline_soft', gpu=0, force_run: bool = False, target_steps: int = 30000,
-            optimizer_params: dict = None, prompt_mode='weighted', prompt_reduce_type='token'):
+            optimizer_params: dict = None, prompt_mode='weighted', prompt_reduce_type='token',
+            prompt_library_trainable=False):
     """
 
     Args:
@@ -242,13 +243,15 @@ def run_lib(model_checkpoint='t5-small', batch_size=32, benchmark='super_glue', 
         optimizer_params:
         prompt_mode: 'softmax' or 'weighted'
         prompt_reduce_type: 'token' or 'prompt'
+        prompt_library_trainable: False
     Returns:
     """
 
     which_model = 'lib'
     constants.PROMPT_MODE.mode = prompt_mode
     constants.PROMPT_REDUCE_TYPE.reduce_type = prompt_reduce_type
-    prefix += f'-{prompt_mode}-{prompt_reduce_type}'
+    constants.PROMPT_LIBRARY_TRAINABLE.trainable = prompt_library_trainable
+    prefix += f'-{prompt_mode}-{prompt_reduce_type}-{prompt_library_trainable}'
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpus[gpu], 'GPU')
@@ -285,17 +288,17 @@ if __name__ == '__main__':
     constants.SEED = 42
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
 
-    # run_lib(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue',
-    #         prefix='lib', token_equalize=False, gpu=0, force_run=False, target_steps=30000, epochs=None,
-    #         optimizer_params={'learning_rate': 0.1, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
-    #         prompt_mode='weighted', prompt_reduce_type='token')
+    run_lib(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue',
+            prefix='lib', token_equalize=False, gpu=0, force_run=False, target_steps=30000, epochs=None,
+            optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
+            prompt_mode='weighted', prompt_reduce_type='token', prompt_library_trainable=True)
 
     # run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue',
     #          prefix='baseline_soft_unequal',
     #          token_equalize=False, gpu=0, force_run=True, target_steps=15000,
     #          optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})
 
-    run_spt(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', epochs=1,
-            prefix='baseline_spt', token_equalize=False, gpu=0, force_run=False, target_steps=30000,
-            optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
-            source_task=('glue', 'mrpc'))
+    # run_spt(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', epochs=1,
+    #         prefix='baseline_spt', token_equalize=False, gpu=0, force_run=False, target_steps=30000,
+    #         optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
+    #         source_task=('glue', 'mrpc'))

@@ -51,6 +51,21 @@ class PromptReduceType:
         self._reduce_type = item
 
 
+class PromptLibraryTrainable:
+    def __init__(self):
+        self._trainable = False
+
+    @property
+    def trainable(self):
+        return self._trainable
+
+    @trainable.setter
+    def trainable(self, item):
+        if not isinstance(item, bool):
+            raise ValueError(f'trainable is a boolean property and can only be set to True or False')
+        self._trainable = item
+
+
 class Tasks:
 
     def __getitem__(self, item):
@@ -66,6 +81,7 @@ class Tasks:
 
 PROMPT_MODE = PromptMode()
 PROMPT_REDUCE_TYPE = PromptReduceType()
+PROMPT_LIBRARY_TRAINABLE = PromptLibraryTrainable()
 PROMPT_DEBUG = False
 
 
