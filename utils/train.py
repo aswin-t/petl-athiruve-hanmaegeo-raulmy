@@ -130,10 +130,13 @@ def create_prompt_tag(model_checkpoint, model_name, which_data, token_equalize):
     Returns: A tag for this unique model configuration
 
     """
+    # This changes the DECODER_MAX_LENGTH, which must now be restored
+    # Downside of using globals
+    tmp = constants.DECODER_MAX_LEN
     led = LabelEncodeDecode(which=which_data, do_equal=token_equalize)
-
     tag = model_checkpoint + '-' + model_name + '-'
     tag += led.get_tag()
+    constants.DECODER_MAX_LEN = tmp
     return tag, led.get_tag()
 
 
