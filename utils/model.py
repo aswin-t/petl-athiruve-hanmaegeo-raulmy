@@ -1971,14 +1971,15 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
                     r'soft-prompt-google_-_t5-base-lm-adapt-PETLSoftPrompt-glue-*-unequal.npy'
                 )
 
+            weight_names = [x.name.split('/')[-1].split(':')[0] for x in model.encoder.prompt.weights]
+
             # These are the stack of the library of prompts
             weight_dict = {}
             prompt_library = np.stack([np.load(filen) for filen in filenames], axis=0)
-            weight_names = [x.name.split('/')[-1].split(':')[0] for x in model.encoder.prompt.weights]
+            weight_dict['prompt-library'] = prompt_library
 
             # Load the weights into arrays
             if constants.PROMPT_MODE.mode == 'softmax':
-                weight_dict['prompt-library'] = prompt_library
                 prompt_weights = np.mean(prompt_library, axis=0)
                 weight_dict['prompt-weight'] = prompt_weights
                 weight_dict['prompt-epsilon'] = np.zeros((constants.NUM_SOFT_TOKENS, 1))
@@ -1991,7 +1992,8 @@ def get_model(which_model, checkpoint, debug, optimizer, logger=None, checkpoint
                 else:
                     prompt_weights = np.ones((prompt_library.shape[0],))
                     prompt_weights *= 1.0 / prompt_library.shape[0]
-                    weight_dict['prompt-weight'] = prompt_weights
+
+                weight_dict['prompt-weight'] = prompt_weights
                 model.load_library([weight_dict[x] for x in weight_names])
         else:
             logger.info(f'Loaded Library checkpoint file {checkpoint_file}')
