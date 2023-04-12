@@ -16,6 +16,7 @@ GLUE_TASKS = (('glue', 'mnli'), ('glue', 'rte'), ('glue', 'cola'), ('glue', 'mrp
               ('glue', 'sst2'), ('glue', 'wnli'))
 SUPERGLUE_TASKS = (('super_glue', 'boolq'), ('super_glue', 'multirc'), ('super_glue', 'wic'), ('super_glue', 'copa'),
                    ('super_glue', 'wsc.fixed'), ('super_glue', 'cb'), )
+SUPERGLUE_BUGS = (('super_glue', 'multirc'), ('super_glue', 'wsc.fixed'))
 TARGET_TASKS = (('super_glue', 'rte'), ('super_glue', 'multirc'), ('glue', 'mrpc'), ('glue', 'sst2'), ('glue', 'mnli'))
 
 
@@ -73,6 +74,8 @@ class Tasks:
             return GLUE_TASKS
         elif item.lower() in ['superglue', 'super_glue']:
             return SUPERGLUE_TASKS
+        elif item.lower() in ['superglue_bugs', 'super_glue_bugs']:
+            return SUPERGLUE_BUGS
         elif item.lower() in ['target', 'target_tasks', 'target tasks']:
             return TARGET_TASKS
         elif item.lower() in ['source', 'source_tasks', 'source tasks']:

@@ -393,6 +393,7 @@ class PrepDataset:
             # Context for answering the question
             question = example['question']
             para = example['paragraph']
+            ans = example['answer']
 
             # Convert integer to text
             answer = led(example['label'])
@@ -400,7 +401,7 @@ class PrepDataset:
             # Adding prompt
             question = _cleanup_str(question)
             para = _cleanup_str(para)
-            question_plus = f"question: {question} paragraph: {para}"
+            question_plus = f"question: {question} answer: {ans} paragraph: {para} "
 
             if add_taskname:
                 question_plus = f'{led.which[1]} {question_plus}'
@@ -471,15 +472,20 @@ class PrepDataset:
         elif led.which[1] == 'wsc.fixed':
             # Context for answering the question
             para = example['text']
-            span1 = example['span1_text']
-            span2 = example['span2_text']
+            span1 = example['span1_index']
+            span2 = example['span2_index']
+            span1_txt = example['span1_text']
+            span2_txt = example['span2_text']
 
             # Convert the numeric label to text
             answer = led(example['label'])
 
             # Adding prompt
-            para = para.replace(span1, f'*{span1}*')
-            para = para.replace(span2, f'*{span2}*')
+            para_split = para.split(' ')
+            para_split[span1] = '*' + para_split[span1] + '*'
+            para_split[span2] = '*' + para_split[span2] + '*'
+            para = " ".join(x for x in para_split)
+
             para = _cleanup_str(para)
             question_plus = f"paragraph: {para}"
 
@@ -876,7 +882,6 @@ class PrepDataset:
         splits = {}
         counts = {}
         token_counts = {'train': {}, 'val': {}}
-        weight_map = {}
 
         # Create a partial function with tokenize.
         for split in ['train', 'val']:

@@ -201,9 +201,9 @@ if __name__ == '__main__':
     constants.PROMPT_REDUCE_TYPE.reduce_type = 'prompt'
     mcp = 'google/t5-base-lm-adapt'.replace('/', '_-_')
     experiment(prefix=f'debug__', model_checkpoint=mcp,
-               batch_size=32, task=('glue', 'mrpc'), gpu=1,
+               batch_size=32, task=('super_glue', 'multirc'), gpu=1,
                encoder_max_length=None, token_equalize=False, epochs=30,
-               which_model='lib',
+               which_model='fft',
                optimizer_param={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
                force_run=False)
 

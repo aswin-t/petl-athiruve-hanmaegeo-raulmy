@@ -78,7 +78,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
     if isinstance(benchmark, list):
         tasks = benchmark
     elif isinstance(benchmark, tuple):
-        raise TypeError('Benchmark can be string, glue, sueprglue or a list of tuples of task names')
+        raise TypeError('Benchmark can be string, glue, superglue or a list of tuples of task names')
     else:
         tasks = Tasks()[benchmark]
 
@@ -98,10 +98,7 @@ def run_fft(model_checkpoint='t5-small', batch_size=32, benchmark='target', epoc
             optimizer_lrs = pickle.load(infi)
         optimizer_lrs = {k: v for k, v in optimizer_lrs['fine_tuning'].items()}
     except FileNotFoundError:
-        if not force_run:
-            raise FileNotFoundError('Was optimization run to get learning rates?')
-        else:
-            optimizer_lrs = {task: 1E-6 for task in tasks}
+        optimizer_lrs = {task: 1E-5 for task in tasks}
 
     # Benchmark of target signifies target tasks
     # Benchmark of target signifies target tasks
@@ -293,12 +290,16 @@ if __name__ == '__main__':
     #         optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
     #         prompt_mode='weighted', prompt_reduce_type='token', prompt_library_trainable=True)
     #
+
     # run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue',
     #          prefix='baseline_soft_unequal',
     #          token_equalize=False, gpu=0, force_run=True, target_steps=15000,
     #          optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})
 
-    run_spt(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', epochs=1,
-            prefix='baseline_spt', token_equalize=False, gpu=0, force_run=False, target_steps=30000,
-            optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
-            source_task=('glue', 'mrpc'))
+    # run_spt(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', epochs=1,
+    #         prefix='baseline_spt', token_equalize=False, gpu=0, force_run=False, target_steps=30000,
+    #         optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
+    #         source_task=('glue', 'mrpc'))
+
+    run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue_bugs',
+            prefix='super_glue_bugs_1', token_equalize=False, gpu=0)
