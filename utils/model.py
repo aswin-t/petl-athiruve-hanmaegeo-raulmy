@@ -112,6 +112,7 @@ class PromptCallback(tf.keras.callbacks.Callback):
             save_best_only: bool = False,
             best_is_lower: bool = False,
             save_freq="epoch",
+            logger=None
     ):
         super().__init__()
         self._supports_tf_logs = True
@@ -122,6 +123,7 @@ class PromptCallback(tf.keras.callbacks.Callback):
         self.cur_best = None
         self.best_is_lower = best_is_lower
         self._current_epoch = None
+        self.logger = logger
 
     def on_test_end(self, logs=None):
         # When it is the first time then use the current value
@@ -145,6 +147,30 @@ class PromptCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_begin(self, epoch, logs=None):
         self._current_epoch = epoch
+
+    def on_train_batch_end(self, batch, logs=None):
+        """
+
+        Args:
+            batch:
+            logs: For logging weight and stuff
+
+        Returns:
+
+        """
+        if batch:
+            pass
+
+        if logs:
+            pass
+
+        try:
+            # This is onyl available for LibraryPrompts
+            weights = self.model.encoder.prompt.similarity_weights.numpy()
+            if self.logger is not None:
+                self.logger.info(f'weights,{",".join(str(x) for x  in weights)}')
+        except AttributeError:
+            pass
 
 
 class PromptDenseLayer(tf.keras.layers.Layer):

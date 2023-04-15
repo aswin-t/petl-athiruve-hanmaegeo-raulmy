@@ -285,21 +285,21 @@ if __name__ == '__main__':
     constants.SEED = 42
     model_checkpoint_ = 'google/t5-base-lm-adapt'.replace('/', '_-_')
 
-    # run_lib(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue',
-    #         prefix='lib', token_equalize=False, gpu=0, force_run=False, target_steps=30000, epochs=None,
-    #         optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
-    #         prompt_mode='weighted', prompt_reduce_type='token', prompt_library_trainable=True)
+    run_lib(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue',
+            prefix='lib', token_equalize=False, gpu=0, force_run=False, target_steps=30000, epochs=None,
+            optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999},
+            prompt_mode='weighted', prompt_reduce_type='token', prompt_library_trainable=True)
     #
 
-    # run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue',
-    #          prefix='baseline_soft_unequal',
-    #          token_equalize=False, gpu=0, force_run=True, target_steps=15000,
-    #          optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999})
+    run_soft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue_bugs',
+             prefix='super_glue_bug_baseline_soft',
+             token_equalize=False, gpu=0, force_run=False, target_steps=30000,
+             optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-5, 'beta_1': 0.8, 'beta_2': 0.999})
 
     # run_spt(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='glue', epochs=1,
     #         prefix='baseline_spt', token_equalize=False, gpu=0, force_run=False, target_steps=30000,
     #         optimizer_params={'learning_rate': 0.3, 'weight_decay': 1E-4, 'beta_1': 0.8, 'beta_2': 0.999},
     #         source_task=('glue', 'mrpc'))
 
-    run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue_bugs',
-            prefix='super_glue_bugs_1', token_equalize=False, gpu=0)
+    # run_fft(model_checkpoint=model_checkpoint_, batch_size=32, benchmark='super_glue_bugs',
+    #         prefix='super_glue_bugs_1', token_equalize=False, gpu=0)

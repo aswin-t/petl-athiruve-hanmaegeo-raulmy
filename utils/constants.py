@@ -92,4 +92,3 @@ if __name__ == '__main__':
     # print(Tasks()['glue'])
     PROMPT_MODE.mode = 'weight'
     print(PROMPT_MODE.mode)
-

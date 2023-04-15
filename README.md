@@ -1,17 +1,34 @@
 # petl-athiruve-hanmaegeo-raulmy
 Exploring a generalized solution for soft prompt transfer
 
-## Getting started
+All experiment results and model checkpoints are saved in the mycheckpoints folder. The log file stores the experiment results
 
-### If setting up on your local machine 
-1. Follow instructions to install transformers from Hugging Face (https://huggingface.co/docs/transformers/installation) 
-   and follow instruction listed below
-2. Clone this repository to your local machine
-3. Locate on you machine where the
-4. From the 'utils' folder of this repository copy ('transformer.model.t5__init__.py')
-5. Find the '__init__.py' file from the folder transfomers -> model -> t5 and rename it to something else. Perhaps '__init__backup.py'
-6. Copy 'transformer.model.t5__init__.py' into this folder and rename it to '__init__.py'
+# Full fine tuning baseline
+- Git clone this repository
 
-There are some Classes from T5 models that are not made available by default. This modification to the '__init__.py' 
-exposes those subclasses
+- Navigate to the notebooks folder and open optimization.ipynb
+- Choose your benchmark 'glue' or 'super_glue'
+- Run the notebook, it will create a file in the mycheckpoints/optimize folder witha  pickle of learning rates
+- Now open the fft.ipynb notebook and set the same benchmark as above and run it
 
+# Vanilla soft prompt tuning
+- Git clone this repository
+- Navigate to the notebooks folder and open soft.ipynb
+- Choose your benchmark 'glue' or 'super_glue'
+- Run the notebook
+- The soft prompts 
+
+# Soft prompt transfer
+- Git clone this repository
+- Navigate to the notebooks folder and open spt.ipynb
+- Note that soft prompt must have already been run and the mycheckpoints/sof_prompts folder is already created
+- choose your source task 
+- Choose your benchmark 'glue' or 'super_glue'
+- Run the notebook
+
+# Library prompt transfer
+- Git clone this repository
+- Navigate to the notebooks folder and open libprompt.ipynb
+- Note that soft prompt must have already been run and the mycheckpoints/sof_prompts folder is already created
+- Choose your benchmark 'glue' or 'super_glue'
+- Run the notebook

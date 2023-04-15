@@ -239,14 +239,14 @@ def _remove_unwanted_checkpoint_files(logger, tag, checkpoint_filepath, official
     return True
 
 
-def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
+def _get_checkpoint_callback(official_name, checkpoint_filepath, tag, logger=None):
     """
 
     Args:
         official_name: Official name of the model
         checkpoint_filepath: Path to save checkpoint
         tag: Model tag
-
+        logger:
     Returns:
 
     """
@@ -257,7 +257,7 @@ def _get_checkpoint_callback(official_name, checkpoint_filepath, tag):
             filepath=filepath, save_weights_only=True, monitor='val_accuracy', save_best_only=True, mode='max')
     elif official_name in ['PETLSoftPrompt', 'PETLLibraryPrompt']:
         filepath = os.path.join(checkpoint_filepath, tag)
-        model_checkpoint_callback = PromptCallback(filepath=filepath, best_is_lower=False)
+        model_checkpoint_callback = PromptCallback(filepath=filepath, best_is_lower=False, logger=logger)
     else:
         raise NotImplementedError(f'Callback for model type {official_name} is not supported')
 
@@ -513,7 +513,7 @@ def run_one_split(logger, model_config: dict = None, optimizer_params=None, epoc
     _log_gpu_usage(logger, prefix="Model created")
 
     # 5. Train the model
-    model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag)
+    model_checkpoint_callback = _get_checkpoint_callback(official_name, checkpoint_filepath, tag, logger=logger)
     history = model.fit(tfsplits['train'], epochs=epochs,
                         callbacks=[model_checkpoint_callback, ],
                         validation_data=tfsplits['val'], initial_epoch=start_epoch)
